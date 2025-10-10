@@ -9,12 +9,12 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=256)
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
-    password: str | None = Field(default=None, min_length=8)
+    password: str | None = Field(default=None, min_length=8, max_length=256)
     is_active: bool | None = None
     is_superuser: bool | None = None
 
@@ -26,4 +26,3 @@ class UserRead(UserBase):
 
     class Config:
         from_attributes = True
-

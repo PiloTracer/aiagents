@@ -35,6 +35,7 @@ RUN test -f "$TESSDATA_PREFIX/eng.traineddata" && \
 
 # Python deps and app
 COPY pyproject.toml /app/
+COPY alembic.ini /app/alembic.ini
 COPY app /app/app
 RUN pip install --upgrade pip && pip install -e .
 

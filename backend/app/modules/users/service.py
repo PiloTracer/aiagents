@@ -21,7 +21,7 @@ class UsersService:
             email=data.email,
             full_name=data.full_name,
             hashed_password=get_password_hash(data.password),
-            is_active=True,
+            is_active=True if is_superuser else False,
             is_superuser=is_superuser,
         )
         return self.repo.create(user)
@@ -33,4 +33,3 @@ class UsersService:
         if not verify_password(password, user.hashed_password):
             return None
         return user
-

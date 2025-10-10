@@ -9,11 +9,17 @@ from passlib.context import CryptContext
 from .config import settings
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["argon2", "bcrypt_sha256", "bcrypt"],
+    deprecated="auto",
+    bcrypt__truncate_error=False,
+    bcrypt_sha256__truncate_error=False,
+)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    # Use Argon2 for new hashes (no 72-byte limit)
+    return pwd_context.hash(password, scheme="argon2")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -31,4 +37,3 @@ def create_access_token(subject: str | int, expires_delta: Optional[int] = None)
 
 def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.AUTH_TOKEN_SECRET, algorithms=["HS256"])
-

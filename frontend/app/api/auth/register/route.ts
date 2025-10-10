@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const { email, password, full_name } = await req.json();
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:18000";
+    const base =
+      process.env.BACKEND_INTERNAL_URL ||
+      process.env.NEXT_PUBLIC_API_BASE ||
+      "http://localhost:18001";
     // Register
     const r = await fetch(`${base}/users/register`, {
       method: "POST",
@@ -39,4 +42,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
 }
-

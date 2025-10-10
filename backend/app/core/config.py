@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     AUTOGEN_MIGRATIONS_DEV: bool = False
     AUTOGEN_MIGRATIONS_PROD: bool = False
 
+    # Default administrator bootstrap
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
+    ADMIN_FULL_NAME: str | None = None
+
     @property
     def cors_origins(self) -> List[str]:
         if not self.ALLOWED_ORIGINS:

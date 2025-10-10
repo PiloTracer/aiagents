@@ -12,7 +12,7 @@ type Me = {
 async function getMe(): Promise<Me | null> {
   const token = (await cookies()).get("access_token")?.value;
   if (!token) return null;
-  const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:18000";
+  const base = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_BASE || "http://localhost:18001";
   try {
     const r = await fetch(`${base}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -42,7 +42,26 @@ export default async function MePage() {
 
   return (
     <div style={{ maxWidth: 640, margin: "40px auto", padding: 16 }}>
-      <h1>Account</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <h1 style={{ margin: 0 }}>Account</h1>
+        {me.is_superuser && (
+          <span
+            title="Administrator"
+            style={{
+              display: "inline-block",
+              padding: "2px 8px",
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 999,
+              background: "#fee2e2",
+              color: "#b91c1c",
+              border: "1px solid #fecaca",
+            }}
+          >
+            Admin
+          </span>
+        )}
+      </div>
       <div style={{ marginTop: 16, display: "grid", gap: 6 }}>
         <div>
           <b>ID:</b> {me.id}
@@ -51,7 +70,7 @@ export default async function MePage() {
           <b>Email:</b> {me.email}
         </div>
         <div>
-          <b>Full name:</b> {me.full_name ?? "—"}
+          <b>Full name:</b> {me.full_name ?? "-"}
         </div>
         <div>
           <b>Role:</b> {me.is_superuser ? "Admin" : "User"}
@@ -63,4 +82,3 @@ export default async function MePage() {
     </div>
   );
 }
-

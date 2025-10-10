@@ -104,3 +104,4 @@ dbdata/
 /samples
 **/secrets/
 vibe/
+\.errors
