@@ -1,0 +1,124 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.pg
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ragdb}
+      POSTGRES_USER: ${POSTGRES_USER:-raguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpass}
+    ports: ["15432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raguser} -d ${POSTGRES_DB:-ragdb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      DEBUGPY: "1"
+      DATABASE_URL: postgresql+psycopg://raguser:ragpass@db:5432/ragdb
+      EMBEDDING_PROVIDER_BASE_URL: ${EMBEDDING_PROVIDER_BASE_URL:-https://api.openai.com/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-large}
+      EMBEDDING_TARGET_DIM: ${EMBEDDING_TARGET_DIM:-3072}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-64}
+      EMBEDDING_MAX_RETRIES: ${EMBEDDING_MAX_RETRIES:-5}
+      EMBEDDING_BACKOFF_BASE: ${EMBEDDING_BACKOFF_BASE:-0.6}
+      CHAT_PROVIDER_BASE_URL: ${CHAT_PROVIDER_BASE_URL:-https://api.openai.com/v1}
+      CHAT_MODEL: ${CHAT_MODEL:-gpt-4.1}
+      CHAT_TEMPERATURE: ${CHAT_TEMPERATURE:-0.2}
+      CHAT_TOP_P: ${CHAT_TOP_P:-1.0}
+      CHAT_MAX_TOKENS: ${CHAT_MAX_TOKENS:-2048}
+      CHAT_MAX_RETRIES: ${CHAT_MAX_RETRIES:-6}
+      CHAT_BACKOFF_BASE: ${CHAT_BACKOFF_BASE:-0.6}
+      # Default LLM provider fallback when requests don't specify one
+      DEFAULT_CHAT_PROVIDER: ${DEFAULT_CHAT_PROVIDER:-openai}
+      # Provider-specific overrides
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com/v1}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-no_api_key_available}
+      DEEPSEEK_CHAT_MODEL: ${DEEPSEEK_CHAT_MODEL:-deepseek-chat}
+      # Gemini API (Google Generative Language API)
+      GEMINI_API_BASE: ${GEMINI_API_BASE:-https://generativelanguage.googleapis.com/v1beta}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-1.5-pro}
+      GEMINI_ENABLE_CONTEXT_CACHE: ${GEMINI_ENABLE_CONTEXT_CACHE:-true}
+      GEMINI_CACHE_TTL_SECONDS: ${GEMINI_CACHE_TTL_SECONDS:-1800}
+      GEMINI_CACHE_MIN_CHARS: ${GEMINI_CACHE_MIN_CHARS:-4000}
+      GEMINI_MAX_TOKENS: ${GEMINI_MAX_TOKENS:-8192}
+      # Vertex AI (OAuth)
+      VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-us-east1}
+      VERTEX_PUBLISHER: ${VERTEX_PUBLISHER:-google}
+      VERTEX_CHAT_MODEL: ${VERTEX_CHAT_MODEL:-gemini-1.5-pro-002}
+      VERTEX_ENABLE_CONTEXT_CACHE: ${VERTEX_ENABLE_CONTEXT_CACHE:-true}
+      VERTEX_CACHE_TTL_SECONDS: ${VERTEX_CACHE_TTL_SECONDS:-1800}
+      VERTEX_CACHE_MIN_CHARS: ${VERTEX_CACHE_MIN_CHARS:-4000}
+      # Vertex-specific chat max tokens; preferred over global CHAT_MAX_TOKENS
+      VERTEX_CHAT_MAX_TOKENS: ${VERTEX_CHAT_MAX_TOKENS:-8192}
+      VERTEX_MAX_TOKENS: ${VERTEX_MAX_TOKENS:-8192}
+      VERTEX_TRUNCATE_SYSTEM_CHARS: ${VERTEX_TRUNCATE_SYSTEM_CHARS:-60000}
+      VERTEX_USE_OAUTH: ${VERTEX_USE_OAUTH:-true}
+      VERTEX_HTTP_TIMEOUT_SECONDS: ${VERTEX_HTTP_TIMEOUT_SECONDS:-120}
+      VERTEX_ENABLE_COUNT_TOKENS: ${VERTEX_ENABLE_COUNT_TOKENS:-false}
+      # xAI Grok (OpenAI-compatible)
+      GROK_API_BASE: ${GROK_API_BASE:-https://api.x.ai/v1}
+      GROK_API_KEY: ${GROK_API_KEY:-}
+      GROK_CHAT_MODEL: ${GROK_CHAT_MODEL:-grok-3}
+      GROK_MAX_TOKENS: ${GROK_MAX_TOKENS:-16384}
+      GROK_CONTEXT_WINDOW: ${GROK_CONTEXT_WINDOW:-131072}
+      GROK_ENABLE_CONTEXT_CACHE: ${GROK_ENABLE_CONTEXT_CACHE:-false}
+      GROK_CACHE_TTL_SECONDS: ${GROK_CACHE_TTL_SECONDS:-1800}
+      GROK_CACHE_MIN_CHARS: ${GROK_CACHE_MIN_CHARS:-4000}
+      # Optional: mount SA credentials and set ADC path
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCP_LOCATION: ${GCP_LOCATION:-us-central1}
+      API_KEY: ${API_KEY:-replace_me}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-change-me}
+      AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-86400}
+      MAX_CANDIDATE_CHUNKS: ${MAX_CANDIDATE_CHUNKS:-96}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-240}
+      MAX_CHUNK_CHARS: ${MAX_CHUNK_CHARS:-1100}
+      TOP_K: ${TOP_K:-16}
+      RERANK: ${RERANK:-false}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      HTTP_TIMEOUT_SECONDS: ${HTTP_TIMEOUT_SECONDS:-60}
+      TESS_LANGS: ${TESS_LANGS:-spa+eng}
+      AUTH_USERS: ${AUTH_USERS:-username_changeme:password_changeme:role_changeme,username2_changeme:password2_changeme:role2_changeme}
+      # multi-LLM values
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      ENABLE_PROVIDER_FALLBACK: ${ENABLE_PROVIDER_FALLBACK:-true}
+      DEEPSEEK_EMBEDDING_MODEL: ${DEEPSEEK_EMBEDDING_MODEL:-deepseek-embedder}
+
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["18000:8000", "15678:5678"]
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/app/secrets/myaccount.json:/secrets/gcp.json:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      NEXT_PUBLIC_DEFAULT_LLM: ${NEXT_PUBLIC_DEFAULT_LLM:-gpt}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:18000}
+    depends_on:
+      - backend
+    ports: ["13000:3000"]
+    volumes:
+      - ./frontend/app:/usr/src/app/app
+      - ./frontend/public:/usr/src/app/public
+
+volumes:
+  dbdata:
