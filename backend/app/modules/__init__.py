@@ -7,6 +7,5 @@
 - router.py   (FastAPI APIRouter exported as `router`)
 
 Routers are auto-discovered and included; models are auto-imported
-for Alembic autogeneration.
+before schema initialization.
 """
-

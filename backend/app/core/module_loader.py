@@ -28,7 +28,7 @@ def import_module_models(module_pkg: str) -> None:
 def collect_routers() -> List[APIRouter]:
     routers: List[APIRouter] = []
     for mod in iter_submodules(MODULES_PACKAGE):
-        # Ensure models are registered before migrations
+        # Ensure models are registered before schema initialization
         import_module_models(mod)
         try:
             router_mod = importlib.import_module(f"{mod}.router")
@@ -38,4 +38,3 @@ def collect_routers() -> List[APIRouter]:
         if router is not None:
             routers.append(router)
     return routers
-

@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     # Core
     DATABASE_URL: str
     ALLOWED_ORIGINS: str | None = "*"
+    DBRAG_QDRANT_URL: AnyUrl | str = "http://dbrag:6333"
+    DBRAG_QDRANT_GRPC_URL: AnyUrl | str | None = None
+    DBRAG_QDRANT_API_KEY: str | None = None
+    DBRAG_QDRANT_TIMEOUT_SECONDS: int = 30
 
     # Auth
     AUTH_TOKEN_SECRET: str

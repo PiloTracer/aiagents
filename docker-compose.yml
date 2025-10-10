@@ -17,6 +17,35 @@ services:
       - dbdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
 
+  dbrag:
+    build:
+      context: .
+      dockerfile: Dockerfile.qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: ${DBRAG_QDRANT_GRPC_PORT:-6334}
+      QDRANT__SERVICE__HTTP_PORT: ${DBRAG_QDRANT_HTTP_PORT:-6333}
+      QDRANT__STORAGE__STORAGE_PATH: /qdrant/storage
+      QDRANT__STORAGE__SNAPSHOTS_PATH: /qdrant/snapshots
+      QDRANT__CLUSTER__ENABLED: ${DBRAG_QDRANT_CLUSTER_ENABLED:-false}
+      QDRANT__TELEMETRY__DISABLED: ${DBRAG_QDRANT_DISABLE_TELEMETRY:-true}
+    ports:
+      - "16433:6333"
+      - "16434:6334"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:6333/healthz >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    volumes:
+      - dbragdata:/qdrant/storage
+      - dbragsnapshots:/qdrant/snapshots
+
   backend:
     build:
       context: ./backend
@@ -102,14 +131,18 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe_12345}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Administrator}
+      DBRAG_QDRANT_URL: ${DBRAG_QDRANT_URL:-http://dbrag:6333}
+      DBRAG_QDRANT_API_KEY: ${DBRAG_QDRANT_API_KEY:-}
+      DBRAG_QDRANT_TIMEOUT_SECONDS: ${DBRAG_QDRANT_TIMEOUT_SECONDS:-30}
 
     depends_on:
       db:
         condition: service_healthy
+      dbrag:
+        condition: service_healthy
     ports: ["18001:8000", "15678:5678"]
     volumes:
       - ./backend/app:/app/app
-      - ./backend/app/secrets/myaccount.json:/secrets/gcp.json:ro
 
   frontend:
     build:
@@ -128,3 +161,5 @@ services:
 
 volumes:
   dbdata:
+  dbragdata:
+  dbragsnapshots:

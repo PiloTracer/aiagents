@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.module_loader import collect_routers
-from app.core.migrations import init_and_upgrade
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, ensure_core_schema
+from app.core.qdrant_client import ensure_qdrant_ready
 from app.modules.users.bootstrap import ensure_default_admin
 
 
@@ -32,8 +32,10 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def _startup():
-        # Generate initial migration if missing and apply all migrations
-        init_and_upgrade()
+        # Create any missing relational tables
+        ensure_core_schema()
+        # Ensure the high-capacity vector store is reachable
+        ensure_qdrant_ready()
         # Ensure default admin is present if configured
         db = SessionLocal()
         try:

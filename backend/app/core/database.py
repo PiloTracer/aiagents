@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from .config import settings
 
 
-# Naming convention helps Alembic autogenerate reliable migrations
+# Stable naming convention keeps constraints predictable across environments
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -27,10 +27,19 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
+def ensure_core_schema() -> None:
+    """
+    Create any missing tables defined on the shared Base.
+
+    SQLAlchemy's create_all(checkfirst=True) only touches tables that do not
+    already exist, so this is safe to run at startup.
+    """
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
