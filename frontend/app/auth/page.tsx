@@ -29,7 +29,7 @@ export default function AuthPage() {
         setError(j.error || "Request failed");
         return;
       }
-      startTransition(() => router.push("/"));
+      startTransition(() => router.push("/me"));
     } catch (e: any) {
       setError(e?.message || "Unexpected error");
     }
