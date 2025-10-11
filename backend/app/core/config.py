@@ -15,6 +15,18 @@ class Settings(BaseSettings):
     DBRAG_QDRANT_GRPC_URL: AnyUrl | str | None = None
     DBRAG_QDRANT_API_KEY: str | None = None
     DBRAG_QDRANT_TIMEOUT_SECONDS: int = 30
+    RAG_DOCUMENT_ROOT: str | None = None
+    RAG_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.txt,.pptx,.ppt,.md"
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+    RAG_EMBEDDING_MODEL: str = "mxbai-embed-large"
+    RAG_EMBEDDING_DIMENSION: int = 3072
+    RAG_MAX_BATCH_SIZE: int = 16
+    EMBEDDING_PROVIDER: str = "openai"
+    EMBEDDING_MODEL: str = "text-embedding-3-large"
+    EMBEDDING_TARGET_DIM: int = 3072
+    EMBEDDING_PROVIDER_BASE_URL: AnyUrl | str | None = None
+    EMBEDDING_API_KEY: str | None = None
 
     # Auth
     AUTH_TOKEN_SECRET: str
