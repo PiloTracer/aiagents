@@ -7,6 +7,6 @@ Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.13/site-pa
 Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (2.5.0)
 Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (2025.10.5)
 Downloading tiktoken-0.12.0-cp313-cp313-manylinux_2_28_x86_64.whl (1.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 7.1 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 6.2 MB/s  0:00:00
 Installing collected packages: tiktoken
 Successfully installed tiktoken-0.12.0

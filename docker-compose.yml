@@ -52,6 +52,7 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       DEBUGPY: "1"
+      DEBUGPY_PORT: ${DEBUGPY_PORT:-5678}
       DATABASE_URL: postgresql+psycopg://raguser:ragpass@db:5432/ragdb
       EMBEDDING_PROVIDER_BASE_URL: ${EMBEDDING_PROVIDER_BASE_URL:-https://api.openai.com/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-large}
@@ -153,6 +154,7 @@ services:
     ports: ["18001:8000", "15678:5678"]
     volumes:
       - ./backend/app:/app/app
+      - ./backend/bin:/app/bin
       - ./backend/app/secrets/myaccount.json:/secrets/gcp.json:ro
       - ./DOCS:/repo/DOCS:ro
     gpus: ${NVIDIA_VISIBLE_DEVICES:-all}
@@ -162,17 +164,28 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     environment:
+      CHOKIDAR_USEPOLLING: "true"
+      NEXT_WEBPACK_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
       NEXT_PUBLIC_DEFAULT_LLM: ${NEXT_PUBLIC_DEFAULT_LLM:-gpt}
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:18001}
       BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend:8000}
+      NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       - backend
     ports: ["13001:3000"]
     volumes:
-      - ./frontend/app:/usr/src/app/app
-      - ./frontend/public:/usr/src/app/public
+      - ./frontend:/usr/src/app
+      - frontend_node_modules:/usr/src/app/node_modules
+    command:
+      [
+        "sh",
+        "-c",
+        "npm install --no-audit --no-fund && npm run dev -- -p 3000 -H 0.0.0.0",
+      ]
 
 volumes:
   dbdata:
   dbragdata:
   dbragsnapshots:
+  frontend_node_modules:

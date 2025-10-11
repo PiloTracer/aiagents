@@ -39,7 +39,8 @@ COPY bin /app/bin
 COPY app /app/app
 RUN pip install --upgrade pip && pip install -e .
 #RUN pip install openai>=2.3.0
-RUN chmod +x /app/bin/docling_vlm.sh
+RUN pip install debugpy
+RUN chmod +x /app/bin/docling_vlm.sh /app/bin/start-dev.sh
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers"]
+CMD ["bash", "/app/bin/start-dev.sh"]
