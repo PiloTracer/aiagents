@@ -15,7 +15,10 @@ class EmbeddingFactory:
 
     @staticmethod
     def build() -> Embeddings:
-        provider = (settings.EMBEDDING_PROVIDER or "openai").lower()
+        provider = (settings.EMBEDDING_PROVIDER or "local").lower()
+        logger.info("Initialising embedding provider: %s", provider)
+        if provider in {"local", "granite"}:
+            return EmbeddingFactory._local()
         if provider == "openai":
             return EmbeddingFactory._openai()
         if provider == "ollama":
@@ -28,10 +31,29 @@ class EmbeddingFactory:
     def _openai() -> Embeddings:
         from langchain_community.embeddings import OpenAIEmbeddings
 
+        logger.info("Using OpenAI embeddings provider")
         return OpenAIEmbeddings(
             model=settings.EMBEDDING_MODEL,
             api_key=settings.EMBEDDING_API_KEY,
-            openai_api_base=str(settings.EMBEDDING_PROVIDER_BASE_URL) if settings.EMBEDDING_PROVIDER_BASE_URL else None,
+            openai_api_base=str(settings.EMBEDDING_PROVIDER_BASE_URL)
+            if settings.EMBEDDING_PROVIDER_BASE_URL
+            else None,
+        )
+
+    @staticmethod
+    def _local() -> Embeddings:
+        from langchain_community.embeddings import OpenAIEmbeddings
+
+        base_url = str(settings.LOCAL_EMBEDDING_BASE_URL).rstrip("/")
+        api_key = settings.LOCAL_EMBEDDING_API_KEY or "granite-local"
+        timeout = settings.LOCAL_EMBEDDING_TIMEOUT_SECONDS
+        logger.info("Using local embedding provider at %s", base_url)
+        return OpenAIEmbeddings(
+            model=settings.LOCAL_EMBEDDING_MODEL,
+            api_key=api_key,
+            openai_api_base=base_url,
+            request_timeout=timeout,
+            max_retries=1,
         )
 
     @staticmethod
@@ -40,7 +62,9 @@ class EmbeddingFactory:
 
         return OllamaEmbeddings(
             model=settings.EMBEDDING_MODEL,
-            base_url=str(settings.EMBEDDING_PROVIDER_BASE_URL) if settings.EMBEDDING_PROVIDER_BASE_URL else None,
+            base_url=str(settings.EMBEDDING_PROVIDER_BASE_URL)
+            if settings.EMBEDDING_PROVIDER_BASE_URL
+            else None,
         )
 
     @staticmethod

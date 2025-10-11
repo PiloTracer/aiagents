@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import List
+
 from pydantic import AnyUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,22 +12,36 @@ class Settings(BaseSettings):
     # Core
     DATABASE_URL: str
     ALLOWED_ORIGINS: str | None = "*"
+
+    # Vector store configuration
     DBRAG_QDRANT_URL: AnyUrl | str = "http://dbrag:6333"
     DBRAG_QDRANT_GRPC_URL: AnyUrl | str | None = None
     DBRAG_QDRANT_API_KEY: str | None = None
-    DBRAG_QDRANT_TIMEOUT_SECONDS: int = 30
+    DBRAG_QDRANT_TIMEOUT_SECONDS: int = 120
+    QDRANT_UPSERT_BATCH_SIZE: int = 128
+
+    # Document ingestion parameters
     RAG_DOCUMENT_ROOT: str | None = None
     RAG_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.txt,.pptx,.ppt,.md"
     RAG_CHUNK_SIZE: int = 1000
     RAG_CHUNK_OVERLAP: int = 200
-    RAG_EMBEDDING_MODEL: str = "mxbai-embed-large"
+    RAG_EMBEDDING_MODEL: str = "ai/llama3.1:8B-Q4_K_M"
     RAG_EMBEDDING_DIMENSION: int = 3072
     RAG_MAX_BATCH_SIZE: int = 16
-    EMBEDDING_PROVIDER: str = "openai"
+
+    # Embedding provider selection
+    EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "text-embedding-3-large"
     EMBEDDING_TARGET_DIM: int = 3072
     EMBEDDING_PROVIDER_BASE_URL: AnyUrl | str | None = None
     EMBEDDING_API_KEY: str | None = None
+
+    # Local embedding (Granite) settings
+    LOCAL_EMBEDDING_MODEL: str = "ai/llama3.1:8B-Q4_K_M"
+    LOCAL_EMBEDDING_BASE_URL: AnyUrl | str = "http://model-runner.docker.internal/engines/llama.cpp/v1"
+    LOCAL_EMBEDDING_API_KEY: str | None = None
+    LOCAL_EMBEDDING_TIMEOUT_SECONDS: int = 120
+    DOCLING_VLM_MODEL: str | None = None
 
     # Auth
     AUTH_TOKEN_SECRET: str

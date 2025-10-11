@@ -22,8 +22,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Include module routers
-    for router in collect_routers():
+    routers = collect_routers()
+    # Ensure DB schema is present before routes are registered
+    ensure_core_schema()
+
+    for router in routers:
         app.include_router(router)
 
     @app.get("/health")
@@ -32,8 +35,6 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def _startup():
-        # Create any missing relational tables
-        ensure_core_schema()
         # Ensure the high-capacity vector store is reachable
         ensure_qdrant_ready()
         # Ensure default admin is present if configured

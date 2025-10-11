@@ -7,8 +7,7 @@ PORT=${UVICORN_PORT:-8000}
 RELOAD_DIRS=${UVICORN_RELOAD_DIRS:-$APP_DIR}
 WORKERS=${UVICORN_WORKERS:-1}
 
-BASE_CMD=(
-  uvicorn
+UVICORN_ARGS=(
   app.main:app
   --host "$HOST"
   --port "$PORT"
@@ -21,8 +20,8 @@ BASE_CMD=(
 if [[ -n "${DEBUGPY:-}" && "${DEBUGPY}" != "0" ]]; then
   DEBUG_PORT=${DEBUGPY_PORT:-5678}
   echo "[dev] Starting backend with debugpy on 0.0.0.0:${DEBUG_PORT}" >&2
-  exec python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} "${BASE_CMD[@]}"
+  exec python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} -m uvicorn "${UVICORN_ARGS[@]}"
 else
   echo "[dev] Starting backend with auto-reload" >&2
-  exec "${BASE_CMD[@]}"
+  exec uvicorn "${UVICORN_ARGS[@]}"
 fi

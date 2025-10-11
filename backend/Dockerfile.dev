@@ -38,7 +38,7 @@ COPY pyproject.toml /app/
 COPY bin /app/bin
 COPY app /app/app
 RUN pip install --upgrade pip && pip install -e .
-#RUN pip install openai>=2.3.0
+RUN pip install "openai>=1.52.0"
 RUN pip install debugpy
 RUN chmod +x /app/bin/docling_vlm.sh /app/bin/start-dev.sh
 
