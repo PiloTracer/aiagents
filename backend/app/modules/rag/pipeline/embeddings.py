@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import logging
+from math import ceil
 from typing import Iterable, List
 
 from langchain_core.embeddings import Embeddings
+
+try:
+    from langchain_openai import OpenAIEmbeddings as NewOpenAIEmbeddings
+except ImportError:  # pragma: no cover - optional dependency
+    NewOpenAIEmbeddings = None
+from langchain_community.embeddings import OpenAIEmbeddings as LegacyOpenAIEmbeddings
 
 from app.core.config import settings
 
@@ -29,32 +36,52 @@ class EmbeddingFactory:
 
     @staticmethod
     def _openai() -> Embeddings:
-        from langchain_community.embeddings import OpenAIEmbeddings
-
         logger.info("Using OpenAI embeddings provider")
-        return OpenAIEmbeddings(
-            model=settings.EMBEDDING_MODEL,
-            api_key=settings.EMBEDDING_API_KEY,
-            openai_api_base=str(settings.EMBEDDING_PROVIDER_BASE_URL)
+        kwargs = {
+            "model": settings.EMBEDDING_MODEL,
+            "api_key": settings.EMBEDDING_API_KEY,
+            "openai_api_base": str(settings.EMBEDDING_PROVIDER_BASE_URL)
             if settings.EMBEDDING_PROVIDER_BASE_URL
             else None,
+            "tiktoken_model_name": "cl100k_base",
+            "disallowed_special": (),
+        }
+        if NewOpenAIEmbeddings:
+            return NewOpenAIEmbeddings(**kwargs)
+        logger.warning(
+            "Package 'langchain-openai' not installed; falling back to deprecated langchain-community OpenAIEmbeddings. "
+            "Install langchain-openai>=0.2.1 to silence this warning."
         )
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("tiktoken_model_name", None)
+        fallback_kwargs.pop("disallowed_special", None)
+        return LegacyOpenAIEmbeddings(**fallback_kwargs)
 
     @staticmethod
     def _local() -> Embeddings:
-        from langchain_community.embeddings import OpenAIEmbeddings
-
         base_url = str(settings.LOCAL_EMBEDDING_BASE_URL).rstrip("/")
         api_key = settings.LOCAL_EMBEDDING_API_KEY or "granite-local"
         timeout = settings.LOCAL_EMBEDDING_TIMEOUT_SECONDS
         logger.info("Using local embedding provider at %s", base_url)
-        return OpenAIEmbeddings(
-            model=settings.LOCAL_EMBEDDING_MODEL,
-            api_key=api_key,
-            openai_api_base=base_url,
-            request_timeout=timeout,
-            max_retries=1,
+        kwargs = {
+            "model": settings.LOCAL_EMBEDDING_MODEL,
+            "api_key": api_key,
+            "openai_api_base": base_url,
+            "request_timeout": timeout,
+            "max_retries": 1,
+            "tiktoken_model_name": "cl100k_base",
+            "disallowed_special": (),
+        }
+        if NewOpenAIEmbeddings:
+            return NewOpenAIEmbeddings(**kwargs)
+        logger.warning(
+            "Package 'langchain-openai' not installed; falling back to deprecated langchain-community OpenAIEmbeddings. "
+            "Install langchain-openai>=0.2.1 to silence this warning."
         )
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("tiktoken_model_name", None)
+        fallback_kwargs.pop("disallowed_special", None)
+        return LegacyOpenAIEmbeddings(**fallback_kwargs)
 
     @staticmethod
     def _ollama() -> Embeddings:
@@ -82,13 +109,21 @@ class EmbeddingEncoder:
         self.batch_size = batch_size
 
     def embed(self, texts: Iterable[str]) -> List[List[float]]:
+        prepared: List[str] = list(texts)
+        if not prepared:
+            return []
+
         vectors: List[List[float]] = []
-        batch: List[str] = []
-        for text in texts:
-            batch.append(text)
-            if len(batch) >= self.batch_size:
-                vectors.extend(self.embedder.embed_documents(batch))
-                batch.clear()
-        if batch:
+        total_batches = ceil(len(prepared) / self.batch_size)
+        for batch_index in range(total_batches):
+            start = batch_index * self.batch_size
+            end = start + self.batch_size
+            batch = prepared[start:end]
+            logger.info(
+                "Embedding batch %d/%d (size=%d)",
+                batch_index + 1,
+                total_batches,
+                len(batch),
+            )
             vectors.extend(self.embedder.embed_documents(batch))
         return vectors

@@ -16,6 +16,11 @@ type JobSummary = {
   updated_at: string | null;
 };
 
+type IngestionResponsePayload = {
+  job: JobSummary;
+  artifacts: unknown[];
+};
+
 const defaultLocation = {
   uri: "area1",
   area_slug: "area1",
@@ -57,11 +62,19 @@ export default function MenuClient() {
         body: JSON.stringify(requestPayload),
       });
       if (!res.ok) {
-      const detail = await res.text();
-      throw new Error(detail || res.statusText);
+        const detail = await res.text();
+        throw new Error(detail || res.statusText);
       }
-      const data = (await res.json()) as unknown;
-      setLogs(`Ingest started. Response:\n${JSON.stringify(data, null, 2)}`);
+      const data = (await res.json()) as IngestionResponsePayload[];
+      const jobsInfo = data
+        .map((item) => `${item.job.id} [${item.job.status}]`)
+        .join(", ");
+      const messageLines = [
+        "Signal sent - processing...",
+        jobsInfo ? `Jobs: ${jobsInfo}` : "Jobs: backend accepted payload.",
+        'Use "Load job history" to monitor progress.',
+      ];
+      setLogs(messageLines.join("\n"));
     } catch (error) {
       setLogs(`Ingest failed: ${(error as Error).message}`);
     } finally {
@@ -74,8 +87,8 @@ export default function MenuClient() {
     try {
       const res = await fetch(`/api/rag/jobs`, { cache: "no-store" });
       if (!res.ok) {
-      const detail = await res.text();
-      throw new Error(detail || res.statusText);
+        const detail = await res.text();
+        throw new Error(detail || res.statusText);
       }
       const data = (await res.json()) as { jobs: JobSummary[] };
       setJobs(data.jobs);
@@ -148,7 +161,7 @@ export default function MenuClient() {
               onClick={execIngest}
               disabled={loading}
             >
-              {loading ? "Submitting…" : "Execute ingest"}
+              {loading ? "Submitting..." : "Execute ingest"}
             </button>
             <details className="text-xs text-slate-300">
               <summary className="cursor-pointer text-blue-200">Preview payload</summary>
@@ -168,7 +181,7 @@ export default function MenuClient() {
               onClick={loadJobs}
               disabled={loadingJobs}
             >
-              {loadingJobs ? "Loading…" : "Load job history"}
+              {loadingJobs ? "Loading..." : "Load job history"}
             </button>
             <ul className="max-h-72 overflow-y-auto space-y-3 text-xs">
               {jobs.map((job) => (
@@ -178,7 +191,7 @@ export default function MenuClient() {
                     <span>{job.status}</span>
                   </div>
                   <div className="mt-1 text-slate-300">
-                    {job.processed_artifacts}/{job.total_artifacts} files · Agent {job.agent_slug}
+                    {job.processed_artifacts}/{job.total_artifacts} files - Agent {job.agent_slug}
                   </div>
                   <div className="mt-1 text-slate-400">Source: {job.source_uri}</div>
                   {job.error_message && <div className="mt-1 text-rose-300">{job.error_message}</div>}

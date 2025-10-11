@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from pathlib import Path
 from typing import Iterable, List
 from uuid import UUID
@@ -16,6 +17,7 @@ from .embeddings import EmbeddingEncoder
 from .extractors import CompositeExtractor
 from .sources import SourceFile
 from .storage import QdrantStorage
+from .text_utils import sanitize_text
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,12 @@ class IngestionPipeline:
 
         for file_info in files:
             try:
+                logger.info(
+                    "Job %s: starting processing for %s (content_type=%s)",
+                    job_id,
+                    file_info.path,
+                    file_info.content_type,
+                )
                 self._process_file(
                     job_id,
                     area_slug=area_slug,
@@ -59,6 +67,11 @@ class IngestionPipeline:
                     force_reprocess=force_reprocess,
                 )
                 self.repo.increment_job_progress(job_id)
+                logger.info(
+                    "Job %s: completed processing for %s",
+                    job_id,
+                    file_info.path,
+                )
             except Exception as exc:
                 logger.exception("Failed to ingest %s: %s", file_info.path, exc)
                 self.repo.mark_job_status(job_id, status="failed", error_message=str(exc))
@@ -82,7 +95,25 @@ class IngestionPipeline:
                 logger.info("Skipping %s (hash already processed)", source.path)
                 return
 
-        text = self.extractor.extract(source.path)
+        extraction_start = time.perf_counter()
+        logger.info("Starting text extraction for %s", source.path)
+        raw_text = self.extractor.extract(source.path)
+        extraction_duration = time.perf_counter() - extraction_start
+        logger.info(
+            "Finished text extraction for %s in %.2f sec (raw chars=%d)",
+            source.path,
+            extraction_duration,
+            len(raw_text),
+        )
+
+        text, removed_chars = sanitize_text(raw_text)
+        if removed_chars:
+            logger.info(
+                "Sanitized %s by stripping %d control characters",
+                source.path,
+                removed_chars,
+            )
+
         artifact = self.repo.create_artifact(
             job_id=job_id,
             area_slug=area_slug,
@@ -104,7 +135,40 @@ class IngestionPipeline:
             payload={"job_id": str(job_id)},
         )
 
-        chunks = list(self.chunker.run(artifact_payload))
+        chunk_start = time.perf_counter()
+        raw_chunks = list(self.chunker.run(artifact_payload))
+        chunk_duration = time.perf_counter() - chunk_start
+        chunks: List[ChunkPayload] = []
+        removed_from_chunks = 0
+        dropped_empty_chunks = 0
+        for chunk in raw_chunks:
+            cleaned_text, removed = sanitize_text(chunk.text)
+            if removed:
+                removed_from_chunks += removed
+                chunk.text = cleaned_text
+            if chunk.text.strip():
+                chunks.append(chunk)
+            else:
+                dropped_empty_chunks += 1
+        if removed_from_chunks:
+            logger.info(
+                "Sanitized %d control characters across chunk set for %s",
+                removed_from_chunks,
+                source.path,
+            )
+        if dropped_empty_chunks:
+            logger.info(
+                "Removed %d empty chunks for %s after sanitation",
+                dropped_empty_chunks,
+                source.path,
+            )
+        logger.info(
+            "Chunked %s into %d segments in %.2f sec (avg chars=%.1f)",
+            source.path,
+            len(chunks),
+            chunk_duration,
+            (sum(len(chunk.text) for chunk in chunks) / len(chunks)) if chunks else 0,
+        )
         if not chunks:
             self.repo.mark_artifact_status(
                 artifact.id,
@@ -113,11 +177,27 @@ class IngestionPipeline:
             )
             return
 
+        embedding_start = time.perf_counter()
         embeddings = self.encoder.embed(chunk.text for chunk in chunks)
+        embedding_duration = time.perf_counter() - embedding_start
+        logger.info(
+            "Embedded %d chunks for %s in %.2f sec",
+            len(chunks),
+            source.path,
+            embedding_duration,
+        )
         for chunk, vector in zip(chunks, embeddings, strict=False):
             chunk.embedding = vector
 
+        storage_start = time.perf_counter()
         qdrant_ids = self.storage.upsert_chunks(area_slug, chunks)
+        storage_duration = time.perf_counter() - storage_start
+        logger.info(
+            "Stored %d chunks for %s in Qdrant in %.2f sec",
+            len(qdrant_ids),
+            source.path,
+            storage_duration,
+        )
         chunk_meta_rows: List[DocumentChunkMetadata] = []
         for idx, (chunk, point_id) in enumerate(zip(chunks, qdrant_ids, strict=False)):
             chunk_meta_rows.append(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from math import ceil
 from typing import Iterable, List
 
 import numpy as np
@@ -52,7 +53,22 @@ class QdrantStorage:
         name = _collection_name(area_slug)
         inserted_ids: List[str] = []
 
-        for batch in _chunk_list(chunk_list, self.batch_size):
+        total_batches = ceil(len(chunk_list) / self.batch_size)
+        logger.info(
+            "Preparing to upsert %d chunks to collection '%s' in %d batch(es)",
+            len(chunk_list),
+            name,
+            total_batches,
+        )
+
+        for batch_index, batch in enumerate(_chunk_list(chunk_list, self.batch_size), start=1):
+            logger.info(
+                "Qdrant upsert batch %d/%d for collection '%s' (%d chunks)",
+                batch_index,
+                total_batches,
+                name,
+                len(batch),
+            )
             points: List[qmodels.PointStruct] = []
             batch_ids: List[str] = []
             for chunk in batch:
@@ -82,4 +98,9 @@ class QdrantStorage:
             if points:
                 self.client.upsert(collection_name=name, points=points)
                 inserted_ids.extend(batch_ids)
+        logger.info(
+            "Completed Qdrant upsert for collection '%s' (%d points)",
+            name,
+            len(inserted_ids),
+        )
         return inserted_ids

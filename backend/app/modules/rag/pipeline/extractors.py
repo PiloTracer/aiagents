@@ -62,11 +62,15 @@ class DoclingExtractor:
                 return "vlm", {"vlm_model": model_name}
 
     def extract(self, path: Path) -> str:
+        logger.info("Docling: converting %s", path)
         result = self._converter.convert(path)
         document = getattr(result, "document", None)
         if not document:
             raise ValueError(f"Docling failed to parse document: {path}")
         text = document.export_to_text()
+        pages = getattr(document, "pages", None)
+        page_count = len(pages) if pages is not None else 0
+        logger.info("Docling: conversion complete for %s (%d pages)", path, page_count)
         return text.strip()
 
 

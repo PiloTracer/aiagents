@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, List
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -27,13 +27,18 @@ AuthUser = Annotated[object, Depends(get_current_user)]
 @router.post("/ingest", response_model=list[IngestionResponse], status_code=status.HTTP_202_ACCEPTED)
 def trigger_ingestion(
     payload: IngestionRequest,
+    background_tasks: BackgroundTasks,
     db: DbSession,
     _: AuthUser,
 ) -> list[IngestionResponse]:
     if not payload.locations:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No locations provided")
     service = RagIngestionService(db)
-    results = service.ingest(payload.locations, force_reprocess=payload.force_reprocess)
+    results = service.ingest(
+        payload.locations,
+        force_reprocess=payload.force_reprocess,
+        background_tasks=background_tasks,
+    )
     return [_map_result(result) for result in results]
 
 
