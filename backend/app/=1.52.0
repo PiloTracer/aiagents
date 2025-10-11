@@ -18,8 +18,7 @@ Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.
 Requirement already satisfied: pydantic-core==2.41.1 in /usr/local/lib/python3.13/site-packages (from pydantic<3,>=1.9.0->openai) (2.41.1)
 Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.13/site-packages (from pydantic<3,>=1.9.0->openai) (0.4.2)
 Downloading openai-2.3.0-py3-none-any.whl (999 kB)
-   ━━━━━━━ 999.8/9… 4.7      0:00:00
-           kB       MB/s            
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 999.8/999.8 kB 5.8 MB/s  0:00:00
 Downloading distro-1.9.0-py3-none-any.whl (20 kB)
 Downloading jiter-0.11.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (347 kB)
 Installing collected packages: jiter, distro, openai

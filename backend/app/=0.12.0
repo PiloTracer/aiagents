@@ -1,0 +1,12 @@
+Collecting tiktoken
+  Downloading tiktoken-0.12.0-cp313-cp313-manylinux_2_28_x86_64.whl.metadata (6.7 kB)
+Requirement already satisfied: regex>=2022.1.18 in /usr/local/lib/python3.13/site-packages (from tiktoken) (2025.9.18)
+Requirement already satisfied: requests>=2.26.0 in /usr/local/lib/python3.13/site-packages (from tiktoken) (2.32.5)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken) (2025.10.5)
+Downloading tiktoken-0.12.0-cp313-cp313-manylinux_2_28_x86_64.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 7.1 MB/s  0:00:00
+Installing collected packages: tiktoken
+Successfully installed tiktoken-0.12.0

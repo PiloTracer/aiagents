@@ -8,23 +8,24 @@ version = "0.1.0"
 description = "Modular FastAPI backend with auto migrations"
 requires-python = ">=3.13"
 dependencies = [
-  "fastapi>=0.115.0",
+  "fastapi>=0.118.3",
   "uvicorn[standard]>=0.30.0",
   "pydantic[email]>=2.12.0",
   "pydantic-settings>=2.11.0",
   "SQLAlchemy>=2.0.30",
   "psycopg[binary]>=3.2.1",
   "passlib[bcrypt]>=1.7.4",
-  "argon2-cffi>=23.1.0",
-  "PyJWT>=2.8.0",
+  "argon2-cffi>=25.1.0",
+  "PyJWT>=2.10.1",
   "email-validator>=2.3.0",
-  "qdrant-client>=1.9.1",
-  "numpy>=2.1.0",
-  "langchain-core>=0.3.5",
-  "langchain-text-splitters>=0.3.1",
-  "langchain-community>=0.3.3",
-  "docling>=0.19.0",
-  "openai>=1.52.0",
+  "qdrant-client>=1.15.1",
+  "numpy>=2.3.3",
+  "langchain-core>=0.3.79",
+  "langchain-text-splitters>=0.3.11",
+  "langchain-community>=0.3.31",
+  "docling>=2.55.1",
+  "openai>=2.3.0",
+  "tiktoken>=0.12.0",
 ]
 
 [tool.setuptools]
