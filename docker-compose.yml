@@ -132,8 +132,16 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe_12345}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Administrator}
       DBRAG_QDRANT_URL: ${DBRAG_QDRANT_URL:-http://dbrag:6333}
+      DBRAG_QDRANT_GRPC_URL: ${DBRAG_QDRANT_GRPC_URL:-}
       DBRAG_QDRANT_API_KEY: ${DBRAG_QDRANT_API_KEY:-}
       DBRAG_QDRANT_TIMEOUT_SECONDS: ${DBRAG_QDRANT_TIMEOUT_SECONDS:-30}
+      RAG_DOCUMENT_ROOT: ${RAG_DOCUMENT_ROOT:-/repo/DOCS}
+      RAG_ALLOWED_EXTENSIONS: ${RAG_ALLOWED_EXTENSIONS:-.pdf,.docx,.doc,.txt,.pptx,.ppt,.md}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-1000}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-200}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-mxbai-embed-large}
+      RAG_EMBEDDING_DIMENSION: ${RAG_EMBEDDING_DIMENSION:-3072}
+      RAG_MAX_BATCH_SIZE: ${RAG_MAX_BATCH_SIZE:-16}
 
     depends_on:
       db:
@@ -143,6 +151,8 @@ services:
     ports: ["18001:8000", "15678:5678"]
     volumes:
       - ./backend/app:/app/app
+      - ./backend/app/secrets/myaccount.json:/secrets/gcp.json:ro
+      - ./DOCS:/repo/DOCS:ro
 
   frontend:
     build:

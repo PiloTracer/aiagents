@@ -76,7 +76,20 @@ export default async function MePage() {
           <b>Role:</b> {me.is_superuser ? "Admin" : "User"}
         </div>
       </div>
-      <div style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <Link
+          href="/menu"
+          style={{
+            display: "inline-block",
+            padding: "8px 16px",
+            borderRadius: 8,
+            background: "#2563eb",
+            color: "#fff",
+            fontWeight: 600,
+          }}
+        >
+          Open Operations Menu
+        </Link>
         <LogoutButton />
       </div>
     </div>
