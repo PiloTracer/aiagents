@@ -86,7 +86,56 @@ class RagIngestionService:
         return results
 
     def list_jobs(self, limit: int = 50) -> List[DocumentIngestionJob]:
-        return list(self.repo.list_jobs(limit=limit))
+        jobs = list(self.repo.list_jobs(limit=limit))
+        for job in jobs:
+            job.token_summary = self._build_token_summary(job)
+        return jobs
+
+    def _build_token_summary(self, job: DocumentIngestionJob) -> dict | None:
+        total_tokens = 0
+        invalid_tokens = 0
+        valid_tokens = 0
+        samples: list[dict] = []
+        fallback_chunks: set[int] = set()
+        total_removed_chars = 0
+        total_dropped_chunks = 0
+
+        for artifact in job.artifacts:
+            metadata = (artifact.payload or {}).get("token_analysis") if artifact.payload else None
+            if not metadata:
+                continue
+            total_tokens += int(metadata.get("total_tokens", 0) or 0)
+            invalid_tokens += int(metadata.get("invalid_tokens", 0) or 0)
+            valid_tokens += int(metadata.get("valid_tokens", 0) or 0)
+            total_removed_chars += int(metadata.get("removed_characters", 0) or 0)
+            total_dropped_chunks += int(metadata.get("dropped_chunks", 0) or 0)
+            for sample in (metadata.get("samples") or []):
+                samples.append(
+                    {
+                        "chunk_index": sample.get("chunk_index"),
+                        "token_count": sample.get("token_count"),
+                        "invalid_characters": sample.get("invalid_characters"),
+                        "sample_tokens": sample.get("sample_tokens"),
+                        "sample_text": sample.get("sample_text"),
+                        "validation_note": sample.get("validation_note"),
+                    }
+                )
+            for chunk_index in metadata.get("fallback_chunks", []) or []:
+                if chunk_index is not None:
+                    fallback_chunks.add(int(chunk_index))
+
+        if total_tokens == 0 and invalid_tokens == 0 and not samples and total_removed_chars == 0 and total_dropped_chunks == 0 and valid_tokens == 0:
+            return None
+
+        return {
+            "total_tokens": total_tokens,
+            "valid_tokens": valid_tokens,
+            "invalid_tokens": invalid_tokens,
+            "removed_characters": total_removed_chars,
+            "fallback_chunks": sorted(fallback_chunks),
+            "dropped_chunks": total_dropped_chunks,
+            "samples": samples[:5],
+        }
 
     def _run_ingestion_job(
         self,

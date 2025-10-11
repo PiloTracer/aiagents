@@ -20,9 +20,11 @@ def iter_submodules(package: str) -> Iterable[str]:
 def import_module_models(module_pkg: str) -> None:
     try:
         importlib.import_module(f"{module_pkg}.models")
-    except ModuleNotFoundError:
-        # Module might be pure Python or not define DB models
-        pass
+    except ModuleNotFoundError as exc:
+        # Swallow the error only if the optional models module itself is missing.
+        if exc.name != f"{module_pkg}.models":
+            raise
+        # Module might be pure Python or not define DB models.
 
 
 def collect_routers() -> List[APIRouter]:
@@ -32,8 +34,11 @@ def collect_routers() -> List[APIRouter]:
         import_module_models(mod)
         try:
             router_mod = importlib.import_module(f"{mod}.router")
-        except ModuleNotFoundError:
-            continue
+        except ModuleNotFoundError as exc:
+            # Only skip modules that truly lack a router module.
+            if exc.name == f"{mod}.router":
+                continue
+            raise
         router = getattr(router_mod, "router", None)
         if router is not None:
             routers.append(router)

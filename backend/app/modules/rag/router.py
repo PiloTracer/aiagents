@@ -68,6 +68,7 @@ def _map_job(job: DocumentIngestionJob) -> JobSummary:
         created_at=job.created_at,
         updated_at=job.updated_at,
         error_message=job.error_message,
+        token_summary=getattr(job, "token_summary", None),
     )
 
 

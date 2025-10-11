@@ -9,6 +9,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+
 from ..models import DocumentChunkMetadata
 from ..repository import RagRepository
 from .chunking import Chunker
@@ -18,6 +20,7 @@ from .extractors import CompositeExtractor
 from .sources import SourceFile
 from .storage import QdrantStorage
 from .text_utils import sanitize_text
+from .token_utils import TokenAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,8 @@ class IngestionPipeline:
         self.repo = RagRepository(session)
         self.extractor = CompositeExtractor()
         self.chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        self.encoder = EmbeddingEncoder(batch_size=batch_size)
+        self.token_analyzer = TokenAnalyzer(model_name=settings.LOCAL_EMBEDDING_MODEL)
+        self.encoder = EmbeddingEncoder(batch_size=batch_size, token_analyzer=self.token_analyzer)
         self.storage = QdrantStorage()
 
     def run_job(
@@ -106,13 +110,25 @@ class IngestionPipeline:
             len(raw_text),
         )
 
-        text, removed_chars = sanitize_text(raw_text)
-        if removed_chars:
+        sanitized_doc = sanitize_text(raw_text)
+        text = sanitized_doc.text
+        if sanitized_doc.removed_count:
             logger.info(
                 "Sanitized %s by stripping %d control characters",
                 source.path,
-                removed_chars,
+                sanitized_doc.removed_count,
             )
+            if sanitized_doc.removed_samples:
+                logger.info(
+                    "Sanitized characters (sample) for %s: %s",
+                    source.path,
+                    ", ".join(sanitized_doc.removed_samples),
+                )
+
+        doc_payload = {
+            "source_uri": source.uri,
+            "document_sanitization": sanitized_doc.as_dict(),
+        }
 
         artifact = self.repo.create_artifact(
             job_id=job_id,
@@ -121,7 +137,7 @@ class IngestionPipeline:
             source_path=str(source.path),
             source_hash=source_hash,
             content_type=source.content_type,
-            payload={"source_uri": source.uri},
+            payload=doc_payload,
         )
 
         artifact_payload = ArtifactPayload(
@@ -139,35 +155,54 @@ class IngestionPipeline:
         raw_chunks = list(self.chunker.run(artifact_payload))
         chunk_duration = time.perf_counter() - chunk_start
         chunks: List[ChunkPayload] = []
-        removed_from_chunks = 0
+        chunk_reports = []
         dropped_empty_chunks = 0
+
         for chunk in raw_chunks:
-            cleaned_text, removed = sanitize_text(chunk.text)
-            if removed:
-                removed_from_chunks += removed
-                chunk.text = cleaned_text
-            if chunk.text.strip():
+            report = self.token_analyzer.prepare_text(chunk.text, chunk_index=chunk.index)
+            sanitized_text = report.sanitized.text
+            if sanitized_text.strip():
+                chunk.text = sanitized_text
+                chunk.token_count = report.token_count
+                chunk.payload = {
+                    **(chunk.payload or {}),
+                    "token_report": report.as_dict(),
+                }
                 chunks.append(chunk)
+                chunk_reports.append(report)
             else:
                 dropped_empty_chunks += 1
-        if removed_from_chunks:
+
+        initial_removed_chars = sum(report.sanitized.removed_count for report in chunk_reports)
+        initial_invalid_tokens = sum(report.invalid_characters for report in chunk_reports)
+        initial_total_tokens = sum(report.token_count for report in chunk_reports)
+
+        if initial_removed_chars:
             logger.info(
-                "Sanitized %d control characters across chunk set for %s",
-                removed_from_chunks,
+                "Sanitized %d characters across chunk set for %s",
+                initial_removed_chars,
+                source.path,
+            )
+        if initial_invalid_tokens:
+            logger.info(
+                "Tokenizer adjusted %d character(s) across chunk set for %s",
+                initial_invalid_tokens,
                 source.path,
             )
         if dropped_empty_chunks:
             logger.info(
-                "Removed %d empty chunks for %s after sanitation",
+                "Removed %d empty chunks for %s after sanitization/token checks",
                 dropped_empty_chunks,
                 source.path,
             )
         logger.info(
-            "Chunked %s into %d segments in %.2f sec (avg chars=%.1f)",
+            "Chunked %s into %d segments in %.2f sec (avg chars=%.1f, total_tokens=%d, invalid_tokens=%d)",
             source.path,
             len(chunks),
             chunk_duration,
             (sum(len(chunk.text) for chunk in chunks) / len(chunks)) if chunks else 0,
+            initial_total_tokens,
+            initial_invalid_tokens,
         )
         if not chunks:
             self.repo.mark_artifact_status(
@@ -177,9 +212,29 @@ class IngestionPipeline:
             )
             return
 
+        dropped_after_embedding = 0
         embedding_start = time.perf_counter()
-        embeddings = self.encoder.embed(chunk.text for chunk in chunks)
+        embedded_chunks, embeddings = self.encoder.embed(chunks)
         embedding_duration = time.perf_counter() - embedding_start
+        if len(embedded_chunks) != len(chunks):
+            dropped_after_embedding = len(chunks) - len(embedded_chunks)
+            logger.warning(
+                "Dropped %d chunk(s) for %s during embedding due to invalid tokens",
+                dropped_after_embedding,
+                source.path,
+            )
+        else:
+            dropped_after_embedding = 0
+        chunks = embedded_chunks
+        if not chunks:
+            self.repo.mark_artifact_status(
+                artifact.id,
+                status="failed",
+                payload={"reason": "embedding_failed_all_chunks"},
+            )
+            logger.error("All chunks failed to embed for %s; skipping artifact", source.path)
+            return
+
         logger.info(
             "Embedded %d chunks for %s in %.2f sec",
             len(chunks),
@@ -188,6 +243,55 @@ class IngestionPipeline:
         )
         for chunk, vector in zip(chunks, embeddings, strict=False):
             chunk.embedding = vector
+
+        final_total_tokens = sum(chunk.token_count for chunk in chunks)
+        final_invalid_tokens = 0
+        final_removed_chars = 0
+        final_samples: list[dict] = []
+        fallback_chunks: list[int] = []
+
+        for chunk in chunks:
+            token_report = (chunk.payload or {}).get("token_report") if chunk.payload else None
+            if token_report:
+                final_invalid_tokens += int(token_report.get("invalid_characters", 0) or 0)
+                final_removed_chars += int(token_report.get("removed_characters", 0) or 0)
+                if len(final_samples) < 5:
+                    final_samples.append(token_report)
+            if (chunk.payload or {}).get("fallback"):
+                fallback_chunks.append(chunk.index)
+
+        if fallback_chunks:
+            logger.warning(
+                "ASCII fallback triggered for chunks %s in %s",
+                fallback_chunks,
+                source.path,
+            )
+
+        valid_tokens = max(final_total_tokens - final_invalid_tokens, 0)
+        logger.info(
+            "Token summary for %s: total_tokens=%d valid_tokens=%d invalid_tokens=%d removed_chars=%d fallback=%s dropped=%d",
+            source.path,
+            final_total_tokens,
+            valid_tokens,
+            final_invalid_tokens,
+            final_removed_chars,
+            fallback_chunks or "none",
+            dropped_after_embedding,
+        )
+
+        artifact.payload = {
+            **(artifact.payload or {}),
+            "token_analysis": {
+                "total_chunks": len(chunks),
+                "total_tokens": final_total_tokens,
+                "valid_tokens": valid_tokens,
+                "removed_characters": final_removed_chars,
+                "invalid_tokens": final_invalid_tokens,
+                "fallback_chunks": fallback_chunks,
+                "dropped_chunks": dropped_after_embedding,
+                "samples": final_samples,
+            },
+        }
 
         storage_start = time.perf_counter()
         qdrant_ids = self.storage.upsert_chunks(area_slug, chunks)

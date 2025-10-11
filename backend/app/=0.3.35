@@ -1,0 +1,10 @@
+Name: langchain-openai
+Version: 0.3.35
+Summary: An integration package connecting OpenAI and LangChain
+Home-page: 
+Author: 
+Author-email: 
+License: MIT
+Location: /usr/local/lib/python3.13/site-packages
+Requires: langchain-core, openai, tiktoken
+Required-by: 

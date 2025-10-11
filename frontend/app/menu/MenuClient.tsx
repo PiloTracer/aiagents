@@ -3,6 +3,25 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
+type TokenSample = {
+  chunk_index?: number;
+  token_count?: number;
+  invalid_characters?: number;
+  sample_tokens?: number[];
+  sample_text?: string;
+  validation_note?: string;
+};
+
+type TokenSummary = {
+  total_tokens: number;
+  valid_tokens?: number;
+  invalid_tokens: number;
+  removed_characters?: number;
+  fallback_chunks?: number[];
+  dropped_chunks?: number;
+  samples?: TokenSample[];
+};
+
 type JobSummary = {
   id: string;
   area_slug: string;
@@ -14,6 +33,7 @@ type JobSummary = {
   error_message: string | null;
   created_at: string;
   updated_at: string | null;
+  token_summary: TokenSummary | null;
 };
 
 type IngestionResponsePayload = {
@@ -92,7 +112,15 @@ export default function MenuClient() {
       }
       const data = (await res.json()) as { jobs: JobSummary[] };
       setJobs(data.jobs);
-      setLogs(`Loaded ${data.jobs.length} jobs.`);
+      const tokenNotes = data.jobs
+        .slice(0, 3)
+        .map((job) =>
+          job.token_summary
+            ? `${job.id}: tokens=${job.token_summary.total_tokens} (valid=${job.token_summary.valid_tokens ?? 0}, invalid=${job.token_summary.invalid_tokens}, removed=${job.token_summary.removed_characters ?? 0}, dropped=${job.token_summary.dropped_chunks ?? 0})`
+            : `${job.id}: no token summary`,
+        )
+        .join("\n");
+      setLogs([`Loaded ${data.jobs.length} jobs.`, tokenNotes].filter(Boolean).join("\n"));
     } catch (error) {
       setLogs(`Job fetch failed: ${(error as Error).message}`);
     } finally {
@@ -184,20 +212,53 @@ export default function MenuClient() {
               {loadingJobs ? "Loading..." : "Load job history"}
             </button>
             <ul className="max-h-72 overflow-y-auto space-y-3 text-xs">
-              {jobs.map((job) => (
-                <li key={job.id} className="rounded border border-white/10 bg-slate-900/70 p-3">
-                  <div className="flex justify-between font-semibold text-blue-200">
-                    <span>{job.area_slug}</span>
-                    <span>{job.status}</span>
-                  </div>
-                  <div className="mt-1 text-slate-300">
-                    {job.processed_artifacts}/{job.total_artifacts} files - Agent {job.agent_slug}
-                  </div>
-                  <div className="mt-1 text-slate-400">Source: {job.source_uri}</div>
-                  {job.error_message && <div className="mt-1 text-rose-300">{job.error_message}</div>}
-                  <div className="mt-1 text-slate-500 text-[11px]">Started: {new Date(job.created_at).toLocaleString()}</div>
-                </li>
-              ))}
+              {jobs.map((job) => {
+                const sampleTokens = job.token_summary?.samples?.[0]?.sample_tokens?.slice(0, 10);
+                const sampleText = job.token_summary?.samples?.[0]?.sample_text;
+                const validationNote = job.token_summary?.samples?.[0]?.validation_note;
+
+                return (
+                  <li key={job.id} className="rounded border border-white/10 bg-slate-900/70 p-3">
+                    <div className="flex justify-between font-semibold text-blue-200">
+                      <span>{job.area_slug}</span>
+                      <span>{job.status}</span>
+                    </div>
+                    <div className="mt-1 text-slate-300">
+                      {job.processed_artifacts}/{job.total_artifacts} files - Agent {job.agent_slug}
+                    </div>
+                    <div className="mt-1 text-slate-400">Source: {job.source_uri}</div>
+                    {job.token_summary && (
+                      <div className="mt-1 text-slate-400">
+                        Tokens: {job.token_summary.total_tokens} (valid {job.token_summary.valid_tokens ?? 0}, invalid {job.token_summary.invalid_tokens})
+                      </div>
+                    )}
+                    {job.token_summary?.removed_characters ? (
+                      <div className="mt-1 text-slate-400">
+                        Removed chars: {job.token_summary.removed_characters}
+                      </div>
+                    ) : null}
+                    {job.token_summary?.dropped_chunks ? (
+                      <div className="mt-1 text-slate-400">
+                        Dropped chunks: {job.token_summary.dropped_chunks}
+                      </div>
+                    ) : null}
+                    {job.token_summary?.fallback_chunks?.length ? (
+                      <div className="mt-1 text-slate-500">
+                        ASCII fallback chunks: {job.token_summary.fallback_chunks.slice(0, 5).join(", ")}
+                      </div>
+                    ) : null}
+                    {sampleTokens ? (
+                      <div className="mt-1 text-slate-500">
+                        Sample tokens: {sampleTokens.map((token) => token?.toString() ?? "").join(", ")}
+                      </div>
+                    ) : null}
+                    {sampleText ? <div className="mt-1 text-slate-500 italic">Sample text: {sampleText}</div> : null}
+                    {validationNote ? <div className="mt-1 text-slate-500">Validation: {validationNote}</div> : null}
+                    {job.error_message && <div className="mt-1 text-rose-300">{job.error_message}</div>}
+                    <div className="mt-1 text-slate-500 text-[11px]">Started: {new Date(job.created_at).toLocaleString()}</div>
+                  </li>
+                );
+              })}
               {!jobs.length && <li className="text-slate-400">No jobs loaded yet.</li>}
             </ul>
           </article>

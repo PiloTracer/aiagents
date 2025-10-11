@@ -4,7 +4,7 @@ from typing import Iterable, Sequence
 from uuid import UUID
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .models import DocumentArtifact, DocumentChunkMetadata, DocumentIngestionJob
 
@@ -31,7 +31,12 @@ class RagRepository:
         return self.session.get(DocumentIngestionJob, job_id)
 
     def list_jobs(self, limit: int = 50) -> Sequence[DocumentIngestionJob]:
-        stmt = select(DocumentIngestionJob).order_by(DocumentIngestionJob.created_at.desc()).limit(limit)
+        stmt = (
+            select(DocumentIngestionJob)
+            .options(selectinload(DocumentIngestionJob.artifacts))
+            .order_by(DocumentIngestionJob.created_at.desc())
+            .limit(limit)
+        )
         return list(self.session.scalars(stmt))
 
     def mark_job_status(self, job_id: UUID, *, status: str, error_message: str | None = None) -> None:

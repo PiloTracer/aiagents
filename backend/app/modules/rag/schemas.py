@@ -36,6 +36,7 @@ class JobSummary(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     error_message: str | None = None
+    token_summary: dict | None = None
 
 
 class ArtifactSummary(BaseModel):
