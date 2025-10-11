@@ -105,3 +105,4 @@ dbdata/
 **/secrets/
 vibe/
 \.errors
+DOCS/
