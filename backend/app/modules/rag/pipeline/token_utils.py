@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+import re
+import unicodedata
 from typing import Iterable, List, Sequence
 
 try:
@@ -80,6 +82,37 @@ class TokenAnalyzer:
             logger.debug("tiktoken encoding_for_model failed for %s, falling back to cl100k_base", model_name)
         return tiktoken.get_encoding("cl100k_base")
 
+    def _basic_cleanup(self, sanitized: SanitizedText) -> SanitizedText:
+        text = sanitized.text
+        whitespace_collapsed = sanitized.whitespace_collapsed
+        newline_normalized = sanitized.newline_normalized
+
+        replacements = {
+            "\u00A0": " ",
+            "\u2028": " ",
+            "\u2029": " ",
+            "\r": " ",
+        }
+        for src, dst in replacements.items():
+            if src in text:
+                text = text.replace(src, dst)
+                whitespace_collapsed += 1
+        if "\n" in text:
+            text = text.replace("\n", " ")
+            newline_normalized += 1
+
+        collapsed_text = re.sub(r"\s+", " ", text).strip()
+        if collapsed_text != text:
+            whitespace_collapsed += 1
+
+        return SanitizedText(
+            text=collapsed_text,
+            removed_count=sanitized.removed_count,
+            removed_samples=list(sanitized.removed_samples),
+            newline_normalized=newline_normalized,
+            whitespace_collapsed=whitespace_collapsed,
+        )
+
     def prepare_chunks(self, texts: Sequence[str]) -> BatchTokenSummary:
         reports: List[TokenReport] = []
         total_tokens = 0
@@ -112,7 +145,7 @@ class TokenAnalyzer:
         return summary
 
     def prepare_text(self, text: str, *, chunk_index: int) -> TokenReport:
-        sanitized = sanitize_text(text)
+        sanitized = self._basic_cleanup(sanitize_text(text))
         encoded_tokens = self.encoding.encode(sanitized.text, disallowed_special=())
         decoded_text = self.encoding.decode(encoded_tokens)
 
@@ -162,7 +195,53 @@ class TokenAnalyzer:
             len(text),
             len(ascii_text),
         )
-        return self.prepare_text(ascii_text, chunk_index=chunk_index)
+        report = self.prepare_text(ascii_text, chunk_index=chunk_index)
+        removed_chars = max(len(text) - len(ascii_text), 0)
+        if removed_chars:
+            report.sanitized.removed_count += removed_chars
+            available = max(0, 10 - len(report.sanitized.removed_samples))
+            if available:
+                report.sanitized.removed_samples.append("ASCII_TRIM")
+        return report
+
+    def enforce_restricted_charset(self, text: str, *, chunk_index: int) -> TokenReport:
+        normalized = unicodedata.normalize("NFKD", text)
+        allowed_chars = []
+        removed = 0
+        samples: list[str] = []
+        for ch in normalized:
+            category = unicodedata.category(ch)
+            if category == "Mn":
+                removed += 1
+                if len(samples) < 10:
+                    samples.append(f"COMBINING:{unicodedata.name(ch, 'UNKNOWN')}")
+                continue
+            if ch.isalnum() or ch in {" ", ".", ",", ";", ":", "-", "'", '"', "/", "?", "!", "(", ")", "%"}:
+                if ch == "\n":
+                    ch = " "
+                allowed_chars.append(ch)
+                continue
+            if ch in {"\t", "\r"}:
+                allowed_chars.append(" ")
+                removed += 1
+                continue
+            removed += 1
+            if len(samples) < 10:
+                samples.append(f"REMOVED:{unicodedata.name(ch, 'UNKNOWN')}")
+        restricted = "".join(allowed_chars)
+        restricted = re.sub(r"\s+", " ", restricted).strip()
+        logger.warning(
+            "Chunk %d required restricted charset fallback; removed=%d",
+            chunk_index,
+            removed,
+        )
+        report = self.prepare_text(restricted, chunk_index=chunk_index)
+        report.sanitized.removed_count += removed
+        if samples:
+            available = max(0, 10 - len(report.sanitized.removed_samples))
+            if available:
+                report.sanitized.removed_samples.extend(samples[:available])
+        return report
 
 
 class _BasicEncoding:

@@ -39,8 +39,14 @@ class IngestionPipeline:
         self.repo = RagRepository(session)
         self.extractor = CompositeExtractor()
         self.chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        self.token_analyzer = TokenAnalyzer(model_name=settings.LOCAL_EMBEDDING_MODEL)
-        self.encoder = EmbeddingEncoder(batch_size=batch_size, token_analyzer=self.token_analyzer)
+        provider = (settings.EMBEDDING_PROVIDER or "local").lower()
+        token_model = settings.LOCAL_EMBEDDING_MODEL if provider in {"local", "granite"} else settings.EMBEDDING_MODEL
+        self.token_analyzer = TokenAnalyzer(model_name=token_model)
+        self.encoder = EmbeddingEncoder(
+            batch_size=batch_size,
+            token_analyzer=self.token_analyzer,
+            provider=provider,
+        )
         self.storage = QdrantStorage()
 
     def run_job(
@@ -249,27 +255,31 @@ class IngestionPipeline:
         final_removed_chars = 0
         final_samples: list[dict] = []
         fallback_chunks: list[int] = []
+        failed_chunks = 0
 
         for chunk in chunks:
-            token_report = (chunk.payload or {}).get("token_report") if chunk.payload else None
+            payload_meta = (chunk.payload or {})
+            token_report = payload_meta.get("token_report") if payload_meta else None
             if token_report:
                 final_invalid_tokens += int(token_report.get("invalid_characters", 0) or 0)
                 final_removed_chars += int(token_report.get("removed_characters", 0) or 0)
                 if len(final_samples) < 5:
                     final_samples.append(token_report)
-            if (chunk.payload or {}).get("fallback"):
+            if payload_meta.get("fallback"):
                 fallback_chunks.append(chunk.index)
+            if payload_meta.get("embedding_failed"):
+                failed_chunks += 1
 
         if fallback_chunks:
             logger.warning(
-                "ASCII fallback triggered for chunks %s in %s",
+                "Fallback normalization triggered for chunks %s in %s",
                 fallback_chunks,
                 source.path,
             )
 
         valid_tokens = max(final_total_tokens - final_invalid_tokens, 0)
         logger.info(
-            "Token summary for %s: total_tokens=%d valid_tokens=%d invalid_tokens=%d removed_chars=%d fallback=%s dropped=%d",
+            "Token summary for %s: total_tokens=%d valid_tokens=%d invalid_tokens=%d removed_chars=%d fallback=%s dropped=%d failed=%d",
             source.path,
             final_total_tokens,
             valid_tokens,
@@ -277,6 +287,7 @@ class IngestionPipeline:
             final_removed_chars,
             fallback_chunks or "none",
             dropped_after_embedding,
+            failed_chunks,
         )
 
         artifact.payload = {
@@ -289,6 +300,7 @@ class IngestionPipeline:
                 "invalid_tokens": final_invalid_tokens,
                 "fallback_chunks": fallback_chunks,
                 "dropped_chunks": dropped_after_embedding,
+                "failed_chunks": failed_chunks,
                 "samples": final_samples,
             },
         }

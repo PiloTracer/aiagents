@@ -15,6 +15,7 @@ class SanitizedText:
     removed_count: int = 0
     removed_samples: list[str] = field(default_factory=list)
     newline_normalized: int = 0
+    whitespace_collapsed: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -22,6 +23,7 @@ class SanitizedText:
             "removed_count": self.removed_count,
             "removed_samples": self.removed_samples,
             "newline_normalized": self.newline_normalized,
+            "whitespace_collapsed": self.whitespace_collapsed,
         }
 
 
@@ -78,5 +80,5 @@ def sanitize_text(value: str) -> SanitizedText:
         removed_count=removed,
         removed_samples=removed_samples,
         newline_normalized=newline_normalized,
+        whitespace_collapsed=0,
     )
-

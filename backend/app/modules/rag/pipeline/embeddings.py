@@ -11,7 +11,7 @@ from openai import BadRequestError
 from app.core.config import settings
 
 from .dto import ChunkPayload
-from .token_utils import TokenAnalyzer
+from .token_utils import TokenAnalyzer, TokenReport
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +85,25 @@ class EmbeddingFactory:
 class EmbeddingEncoder:
     """Embeds chunks into dense vectors, batching for efficiency."""
 
-    def __init__(self, *, batch_size: int, token_analyzer: TokenAnalyzer | None = None):
+    def __init__(self, *, batch_size: int, token_analyzer: TokenAnalyzer | None = None, provider: str):
         self.embedder = EmbeddingFactory.build()
         self.batch_size = batch_size
         self.token_analyzer = token_analyzer
+        self.provider = (provider or "local").lower()
+
+        if self.provider in {"local", "granite"}:
+            self.model_name = settings.LOCAL_EMBEDDING_MODEL
+            base = str(settings.LOCAL_EMBEDDING_BASE_URL).rstrip("/")
+            self.embedding_endpoint = f"{base}/embeddings"
+        elif self.provider == "openai":
+            self.model_name = settings.EMBEDDING_MODEL
+            provider_base = settings.EMBEDDING_PROVIDER_BASE_URL or "https://api.openai.com/v1"
+            self.embedding_endpoint = f"{str(provider_base).rstrip('/')}/embeddings"
+        else:
+            self.model_name = settings.EMBEDDING_MODEL
+            self.embedding_endpoint = ""
+
+        self.vector_dim = settings.RAG_EMBEDDING_DIMENSION or settings.EMBEDDING_TARGET_DIM
 
     def embed(self, chunks: Iterable[ChunkPayload]) -> tuple[List[ChunkPayload], List[List[float]]]:
         chunk_list: List[ChunkPayload] = list(chunks)
@@ -160,6 +175,29 @@ class EmbeddingEncoder:
             validation_note,
         )
 
+    def _log_embedding_failure(
+        self,
+        chunk: ChunkPayload,
+        batch_index: int,
+        total_batches: int,
+        attempt_label: str,
+        error: Exception,
+    ) -> None:
+        endpoint = self.embedding_endpoint or "<unavailable>"
+        snippet = chunk.text.replace("\n", " ")[:200]
+        logger.error(
+            "Embedding failure (%s) chunk=%d batch=%d/%d model=%s endpoint=%s error=%s input_length=%d payload_preview=%r",
+            attempt_label,
+            chunk.index,
+            batch_index + 1,
+            total_batches,
+            self.model_name,
+            endpoint,
+            error,
+            len(chunk.text),
+            snippet,
+        )
+
     def _recover_batch(
         self,
         batch_chunks: Sequence[ChunkPayload],
@@ -168,74 +206,66 @@ class EmbeddingEncoder:
     ) -> tuple[List[ChunkPayload], List[List[float]]]:
         recovered_chunks: List[ChunkPayload] = []
         recovered_vectors: List[List[float]] = []
+
         for chunk in batch_chunks:
-            try:
-                vector = self.embedder.embed_documents([chunk.text])[0]
-                recovered_chunks.append(chunk)
-                recovered_vectors.append(vector)
+            last_error: BadRequestError | None = None
+            success = False
+
+            if not self.token_analyzer:
+                logger.error("Token analyzer unavailable; cannot recover chunk %d", chunk.index)
                 continue
-            except BadRequestError as exc:
-                if "invalid tokens" not in str(exc).lower():
-                    raise
 
-            logger.warning(
-                "Chunk %d in batch %d/%d failed token validation; forcing ASCII fallback. Snippet=%r",
-                chunk.index,
-                batch_index + 1,
-                total_batches,
-                chunk.text[:120],
+            fallback_reports: list[tuple[str, TokenReport]] = []
+            ascii_report = self.token_analyzer.enforce_ascii(chunk.text, chunk_index=chunk.index)
+            fallback_reports.append(("ascii", ascii_report))
+            restricted_report = self.token_analyzer.enforce_restricted_charset(
+                ascii_report.sanitized.text, chunk_index=chunk.index
             )
+            fallback_reports.append(("restricted", restricted_report))
 
-            if self.token_analyzer:
-                report = self.token_analyzer.enforce_ascii(chunk.text, chunk_index=chunk.index)
+            for label, report in fallback_reports:
                 chunk.text = report.sanitized.text
                 chunk.token_count = report.token_count
                 chunk.payload = {
                     **(chunk.payload or {}),
                     "token_report": report.as_dict(),
-                    "fallback": "ascii",
+                    "fallback": label,
                 }
-                logger.info(
-                    "ASCII fallback for chunk %d produced %d tokens; sample_tokens=%s",
-                    chunk.index,
-                    report.token_count,
-                    report.sample_tokens,
-                )
-                logger.debug(
-                    "ASCII fallback chunk %d text snippet: %r",
-                    chunk.index,
-                    report.sample_text,
-                )
-            else:
-                ascii_text = chunk.text.encode("ascii", "ignore").decode("ascii")
-                logger.warning(
-                    "Chunk %d falling back to ASCII via naive strip; original length=%d ascii length=%d",
-                    chunk.index,
-                    len(chunk.text),
-                    len(ascii_text),
-                )
-                chunk.text = ascii_text
+                try:
+                    vector = self.embedder.embed_documents([chunk.text])[0]
+                    recovered_chunks.append(chunk)
+                    recovered_vectors.append(vector)
+                    success = True
+                    break
+                except BadRequestError as exc:
+                    if "invalid tokens" not in str(exc).lower():
+                        raise
+                    last_error = exc
+                    self._log_embedding_failure(chunk, batch_index, total_batches, label, exc)
+                    continue
 
-            try:
-                vector = self.embedder.embed_documents([chunk.text])[0]
-                recovered_chunks.append(chunk)
-                recovered_vectors.append(vector)
-            except BadRequestError as final_exc:
-                logger.error(
-                    "Chunk %d in batch %d/%d failed embedding after ASCII fallback; dropping chunk. Error: %s",
-                    chunk.index,
-                    batch_index + 1,
-                    total_batches,
-                    final_exc,
-                )
-                chunk.payload = {
-                    **(chunk.payload or {}),
-                    "embedding_failed": str(final_exc),
-                }
-                logger.error(
-                    "Dropped chunk %d due to embedding failure. Text snippet: %r",
-                    chunk.index,
-                    chunk.text[:120],
-                )
+            if not success:
+                if last_error:
+                    self._log_embedding_failure(chunk, batch_index, total_batches, "final", last_error)
+                if self.vector_dim:
+                    zero_vector = [0.0] * self.vector_dim
+                    chunk.payload = {
+                        **(chunk.payload or {}),
+                        "embedding_failed": True,
+                        "embedding_failure_reason": str(last_error) if last_error else "unknown_error",
+                    }
+                    recovered_chunks.append(chunk)
+                    recovered_vectors.append(zero_vector)
+                    logger.error(
+                        "Chunk %d in batch %d/%d replaced with zero vector after repeated embedding failures.",
+                        chunk.index,
+                        batch_index + 1,
+                        total_batches,
+                    )
+                else:
+                    logger.error(
+                        "Chunk %d dropped due to embedding failure; unknown vector dimension.",
+                        chunk.index,
+                    )
 
         return recovered_chunks, recovered_vectors

@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import inspect
 from typing import Protocol
 
 from app.core.config import settings
