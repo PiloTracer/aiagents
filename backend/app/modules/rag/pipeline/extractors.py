@@ -29,10 +29,30 @@ class DoclingExtractor:
         if settings.DOCLING_VLM_MODEL:
             try:
                 pipeline_hint, pipeline_options = self._resolve_vlm_pipeline()
-                self._converter = DocumentConverter(
-                    pipeline=pipeline_hint,
-                    pipeline_options=pipeline_options,
-                )
+                init_kwargs: dict[str, object] = {}
+                init_signature = getattr(DocumentConverter, "__init__")
+                init_params = getattr(init_signature, "__code__", None)
+                param_names = []
+                if init_params is not None:
+                    param_names = init_signature.__code__.co_varnames[: init_signature.__code__.co_argcount]
+                else:  # pragma: no cover - defensive
+                    import inspect
+
+                    param_names = list(inspect.signature(DocumentConverter).parameters.keys())
+
+                if "pipeline_profile" in param_names:
+                    init_kwargs["pipeline_profile"] = pipeline_hint
+                elif "pipeline" in param_names:
+                    init_kwargs["pipeline"] = pipeline_hint
+                elif "pipeline_hint" in param_names:  # older alias
+                    init_kwargs["pipeline_hint"] = pipeline_hint
+
+                if "pipeline_options" in param_names:
+                    init_kwargs["pipeline_options"] = pipeline_options
+                elif "pipeline_profile_options" in param_names:
+                    init_kwargs["pipeline_profile_options"] = pipeline_options
+
+                self._converter = DocumentConverter(**init_kwargs)
                 self._vlm_enabled = True
                 logger.info(
                     "Docling VLM pipeline enabled with model %s",
