@@ -22,37 +22,52 @@ docker exec dlv2-backend-1 python -c "from sqlalchemy import inspect; from app.c
 ## Rebuilding containers:
 docker compose up -d --build backend frontend
 
-## install LLaMA 3.1 (8B-Q4_K_M)
-- $env:HF_TOKEN="hugging face api key"
-- docker model pull ai/llama3.1:8B-Q4_K_M
-- docker model run ai/llama3.1:8B-Q4_K_M 'What are three benefits of running LLMs locally?'
-- docker model pull ai/mxbai-embed-large
+### Manual run outside compose
+```bash
+# Set your Hugging Face token for the current session
+$env:HF_TOKEN = "hf_youractualtokenhere"
 
-## Local LLaMA 3.1 (8B-Q4_K_M)
-
-Docker Desktop's Model Runner exposes the host `model-runner.docker.internal`. Ensure the `ai/llama3.1:8B-Q4_K_M` engine is running (Docker Desktop ? Extensions ? Model Runner). The backend connects to:
-
-```text
-http://model-runner.docker.internal/engines/llama.cpp/v1
+# Optional: verify
+echo $env:HF_TOKEN
 ```
 
-### Quick verification (from the backend container)
 
 ```bash
-curl http://model-runner.docker.internal/engines/llama.cpp/v1/models
-curl http://model-runner.docker.internal/engines/llama.cpp/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"ai/llama3.1:8B-Q4_K_M","messages":[{"role":"user","content":"Say hello"}]}'
-curl http://model-runner.docker.internal/engines/llama.cpp/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "ai/llama3.1:8B-Q4_K_M",
-    "input": [
-      "Artificial intelligence is transforming the world.",
-      "Costa Rica is known for its biodiversity."
-    ],
-    "pooling": "mean"
-  }'
+docker run -d `
+  --name bge-embedder `
+  --gpus all `
+  -p 18082:8002 `
+  -e HF_TOKEN=$env:HF_TOKEN `
+  ghcr.io/huggingface/text-embeddings-inference:1.8 `
+  --model-id BAAI/bge-m3 `
+  --pooling mean `
+  --hostname 0.0.0.0 `
+  --port 8002
+```
+# one line
+docker run -d   --name bge-embedder   --gpus all   -p 18082:8002   -e HF_TOKEN=$env:HF_TOKEN   ghcr.io/huggingface/text-embeddings-inference:1.8   --model-id BAAI/bge-m3   --pooling mean   --hostname 0.0.0.0   --port 8002
+
+Set `LOCAL_EMBEDDING_BASE_URL` and `LOCAL_EMBEDDING_URL` as follows:
+
+- When running the embedder manually on the host:
+  - `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:18082`
+  - `LOCAL_EMBEDDING_URL=http://host.docker.internal:18082/embed`
+- When addressing it directly from the host: `LOCAL_EMBEDDING_URL=http://localhost:18082/embed`
+- When the embedder runs inside the same Compose stack: `LOCAL_EMBEDDING_URL=http://bge-embedder:8002/embed` (base URL can stay unset).
+
+### Smoke test
+
+```bash
+$body = @{ inputs = @("hola José","café sin azúcar") } | ConvertTo-Json -Depth 3
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+
+Invoke-RestMethod -Uri "http://localhost:18082/embed" `
+  -Method Post `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $bytes
 ```
 
-To switch back to OpenAI embeddings set `EMBEDDING_PROVIDER=openai` and provide `OPENAI_API_KEY`.
+# one line
+Invoke-RestMethod -Uri "http://host.docker.internal:18082/embed" -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
+
+Expect 1024-length vectors in the response.

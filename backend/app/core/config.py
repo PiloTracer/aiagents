@@ -25,20 +25,21 @@ class Settings(BaseSettings):
     RAG_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.txt,.pptx,.ppt,.md"
     RAG_CHUNK_SIZE: int = 1000
     RAG_CHUNK_OVERLAP: int = 200
-    RAG_EMBEDDING_MODEL: str = "ai/llama3.1:8B-Q4_K_M"
-    RAG_EMBEDDING_DIMENSION: int = 3072
+    RAG_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    RAG_EMBEDDING_DIMENSION: int = 1024
     RAG_MAX_BATCH_SIZE: int = 16
 
     # Embedding provider selection
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "text-embedding-3-large"
-    EMBEDDING_TARGET_DIM: int = 3072
+    EMBEDDING_TARGET_DIM: int = 1024
     EMBEDDING_PROVIDER_BASE_URL: AnyUrl | str | None = None
     EMBEDDING_API_KEY: str | None = None
 
     # Local embedding (Granite) settings
-    LOCAL_EMBEDDING_MODEL: str = "ai/llama3.1:8B-Q4_K_M"
-    LOCAL_EMBEDDING_BASE_URL: AnyUrl | str = "http://model-runner.docker.internal/engines/llama.cpp/v1"
+    LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    LOCAL_EMBEDDING_BASE_URL: AnyUrl | str = "http://host.docker.internal:18082"
+    LOCAL_EMBEDDING_URL: AnyUrl | str = "http://host.docker.internal:18082/embed"
     LOCAL_EMBEDDING_API_KEY: str | None = None
     LOCAL_EMBEDDING_TIMEOUT_SECONDS: int = 120
     DOCLING_VLM_MODEL: str | None = None

@@ -4,9 +4,11 @@ import logging
 from math import ceil
 from typing import Iterable, List, Sequence
 
+import requests
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from openai import BadRequestError
+from requests import RequestException
 
 from app.core.config import settings
 
@@ -14,6 +16,52 @@ from .dto import ChunkPayload
 from .token_utils import TokenAnalyzer, TokenReport
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_local_embedding_endpoint() -> str:
+    base = str(settings.LOCAL_EMBEDDING_BASE_URL or "").rstrip("/")
+    explicit = str(settings.LOCAL_EMBEDDING_URL or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    if base:
+        return f"{base}/embed"
+    raise ValueError("LOCAL_EMBEDDING_BASE_URL or LOCAL_EMBEDDING_URL must be configured")
+
+
+class TextEmbeddingsInferenceEmbeddings(Embeddings):
+    """Client for Hugging Face Text Embeddings Inference /embed endpoint."""
+
+    def __init__(self, *, endpoint: str, timeout: int, model: str) -> None:
+        self.endpoint = endpoint.rstrip("/")
+        self.timeout = timeout
+        self.model = model
+        self.session = requests.Session()
+
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        payload = {"inputs": texts}
+        response = self.session.post(self.endpoint, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        vectors: List[List[float]] = []
+        if isinstance(data, dict):
+            if "data" in data:
+                vectors = [item.get("embedding", []) for item in data.get("data", [])]
+            elif "items" in data:
+                vectors = [item.get("vector", []) for item in data.get("items", [])]
+            elif "embeddings" in data:
+                vectors = data.get("embeddings", [])
+        if not vectors:
+            raise ValueError(f"Unexpected response from embedding endpoint: {data}")
+        return vectors
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self._embed(list(texts))
+
+    def embed_query(self, text: str) -> List[float]:
+        vectors = self._embed([text])
+        return vectors[0]
 
 
 class EmbeddingFactory:
@@ -49,20 +97,14 @@ class EmbeddingFactory:
 
     @staticmethod
     def _local() -> Embeddings:
-        base_url = str(settings.LOCAL_EMBEDDING_BASE_URL).rstrip("/")
-        api_key = settings.LOCAL_EMBEDDING_API_KEY or "granite-local"
+        endpoint = _resolve_local_embedding_endpoint()
         timeout = settings.LOCAL_EMBEDDING_TIMEOUT_SECONDS
-        logger.info("Using local embedding provider at %s", base_url)
-        kwargs = {
-            "model": settings.LOCAL_EMBEDDING_MODEL,
-            "api_key": api_key,
-            "openai_api_base": base_url,
-            "request_timeout": timeout,
-            "max_retries": 1,
-            "tiktoken_model_name": "cl100k_base",
-            "disallowed_special": (),
-        }
-        return OpenAIEmbeddings(**kwargs)
+        logger.info("Using local embedding provider at %s", endpoint)
+        return TextEmbeddingsInferenceEmbeddings(
+            endpoint=endpoint,
+            timeout=timeout,
+            model=settings.LOCAL_EMBEDDING_MODEL,
+        )
 
     @staticmethod
     def _ollama() -> Embeddings:
@@ -93,8 +135,7 @@ class EmbeddingEncoder:
 
         if self.provider in {"local", "granite"}:
             self.model_name = settings.LOCAL_EMBEDDING_MODEL
-            base = str(settings.LOCAL_EMBEDDING_BASE_URL).rstrip("/")
-            self.embedding_endpoint = f"{base}/embeddings"
+            self.embedding_endpoint = _resolve_local_embedding_endpoint()
         elif self.provider == "openai":
             self.model_name = settings.EMBEDDING_MODEL
             provider_base = settings.EMBEDDING_PROVIDER_BASE_URL or "https://api.openai.com/v1"
@@ -123,7 +164,7 @@ class EmbeddingEncoder:
                 batch_vectors = self.embedder.embed_documents(texts)
                 vectors.extend(batch_vectors)
                 kept_chunks.extend(batch_chunks)
-            except BadRequestError as exc:
+            except (BadRequestError, RequestException) as exc:
                 if "invalid tokens" in str(exc).lower():
                     logger.warning(
                         "Embedding batch %d/%d encountered invalid tokens; attempting recovery",
@@ -208,7 +249,7 @@ class EmbeddingEncoder:
         recovered_vectors: List[List[float]] = []
 
         for chunk in batch_chunks:
-            last_error: BadRequestError | None = None
+            last_error: Exception | None = None
             success = False
 
             if not self.token_analyzer:
@@ -237,7 +278,7 @@ class EmbeddingEncoder:
                     recovered_vectors.append(vector)
                     success = True
                     break
-                except BadRequestError as exc:
+                except (BadRequestError, RequestException) as exc:
                     if "invalid tokens" not in str(exc).lower():
                         raise
                     last_error = exc
@@ -269,3 +310,4 @@ class EmbeddingEncoder:
                     )
 
         return recovered_chunks, recovered_vectors
+
