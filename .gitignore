@@ -103,6 +103,7 @@ dbdata/
 # other
 /samples
 **/secrets/
+**/backups/
 vibe/
 \.errors
 DOCS/
