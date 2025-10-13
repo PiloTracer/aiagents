@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     LOCAL_EMBEDDING_TIMEOUT_SECONDS: int = 120
     DOCLING_VLM_MODEL: str | None = None
 
+    # LLM generation defaults
+    LLM_PROVIDER: str = "local"
+    OPENAI_BASE_URL: AnyUrl | str | None = "https://api.openai.com/v1"
+    OPENAI_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_ORG: str | None = None
+    OPENAI_PROJECT: str | None = None
+    OPENAI_TEMPERATURE: float = 0.3
+    OPENAI_MAX_TOKENS: int = 1200
+
+    # Chat / conversation settings
+    CHAT_DEFAULT_TOP_K: int = 5
+    CHAT_CONTEXT_MAX_CHUNKS: int = 8
+    CHAT_MAX_HISTORY_MESSAGES: int = 8
+
     # Auth
     AUTH_TOKEN_SECRET: str
     AUTH_TOKEN_TTL_SECONDS: int = 86400

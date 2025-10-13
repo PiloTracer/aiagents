@@ -299,6 +299,17 @@ export default function MenuClient() {
               Open catalog
             </Link>
           </article>
+
+          <article className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3 text-sm text-slate-300">
+            <h2 className="text-lg font-semibold text-blue-200">Chat Assistant</h2>
+            <p>Ask questions and receive sourced answers from the multi-agent knowledge base.</p>
+            <Link
+              href="/chat"
+              className="inline-block rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
+            >
+              Open assistant
+            </Link>
+          </article>
         </section>
 
         <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3">
