@@ -106,3 +106,7 @@ dbdata/
 vibe/
 \.errors
 DOCS/
+notrack.*
+model_manifest.*
+nim_manifest*.*
+readme.scope.*
