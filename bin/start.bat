@@ -7,8 +7,8 @@ REM  1) Start
 REM  2) Stop
 REM  3) Reset (remove only this project's Docker resources)
 REM  4) Restart
-REM  5) Restore DB volume backup [stack remains stopped]
-REM  6) Backup DB volume to tar.gz
+REM  5) Restore DB volumes backup [stack remains stopped]
+REM  6) Backup DB volumes to tar.gz
 REM  7) View logs (ESC to exit)
 REM  0) Exit
 
@@ -19,6 +19,7 @@ set "COMPOSE_FILE=docker-compose.yml"
 set "PROJECT_NAME=dlv2"
 set "BACKUP_DIR=%CD%\backups"
 set "STACK_LABEL=com.docker.compose.project=%PROJECT_NAME%"
+set "VOLUME_SUFFIXES=dbdata dbragdata dbragsnapshots"
 
 call :detect_compose || goto :fatal
 call :check_docker || goto :fatal
@@ -65,8 +66,8 @@ echo   1) Start (docker compose up -d)
 echo   2) Stop (docker compose down)
 echo   3) Reset (remove this stack only)
 echo   4) Restart (down + up)
-echo   5) Restore DB volume from backup (.tar.gz)
-echo   6) Backup DB volume (as .tar.gz)
+echo   5) Restore DB volumes from backup (.tar.gz)
+echo   6) Backup DB volumes (as .tar.gz)
 echo   7) View Logs  (ESC to exit)
 echo   90) Maintenance off (N/A)
 echo   99) Refresh menu
@@ -220,25 +221,47 @@ echo [INFO] Preparing backup directory: "%BACKUP_DIR%"
 if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%" 2>nul
 if errorlevel 1 (echo [ERROR] Cannot create backup directory & call :pause & goto :menu)
 
-set "VOL_DB=%PROJECT_NAME%_dbdata"
-
 call :timestamp
 set "TS=%_TS%"
 
 echo [INFO] Ensuring stack is stopped for a consistent backup
 call :compose_cmd down >nul 2>&1
 
-docker volume inspect "%VOL_DB%" >nul 2>&1
-if errorlevel 1 (
-  echo [WARN] Volume "%VOL_DB%" not found Skipping DB backup
-) else (
-  echo [INFO] Backing up DB volume "%VOL_DB%" to dbdata-%TS%.tar.gz
-  docker run --rm -v "%VOL_DB%:/volume" -v "%BACKUP_DIR%:/backup" alpine sh -c "tar czf /backup/dbdata-%TS%.tar.gz -C /volume ."
-  if errorlevel 1 (echo [ERROR] DB backup failed & call :pause & goto :menu)
+set "SUCCESS_LIST="
+set "WARN_LIST="
+set "FAILURE="
+
+for %%S in (%VOLUME_SUFFIXES%) do (
+  set "VOL_NAME=%PROJECT_NAME%_%%S"
+  call :backup_volume "%%S" "!VOL_NAME!" "%TS%" "%BACKUP_DIR%"
+  set "RC=!errorlevel!"
+  if "!RC!"=="0" (
+    set "SUCCESS_LIST=!SUCCESS_LIST! %%S"
+  ) else if "!RC!"=="1" (
+    set "WARN_LIST=!WARN_LIST! %%S"
+  ) else (
+    set "FAILURE=1"
+  )
 )
 
+if defined FAILURE (
+  echo [ERROR] One or more volume backups failed. See messages above.
+  call :pause
+  goto :menu
+)
 
-echo [OK] Backup successful File generated: dbdata-%TS%.tar.gz in "%BACKUP_DIR%"
+if not defined SUCCESS_LIST (
+  echo [WARN] No volumes were backed up. Missing volumes:%WARN_LIST%
+  call :pause
+  goto :menu
+)
+
+if defined WARN_LIST (
+  echo [WARN] Skipped volumes (not found):%WARN_LIST%
+)
+
+echo [OK] Backup completed. Archives created for:%SUCCESS_LIST%
+echo [INFO] Files stored in "%BACKUP_DIR%" as ^<suffix^>-%TS%.tar.gz
 echo [INFO] Stack remains stopped Use option 1 to start
 call :pause
 goto :menu
@@ -253,8 +276,6 @@ if %RUN_COUNT% gtr 0 (
 
 echo [INFO] This will restore volumes from backups; stack stays stopped
 echo        Existing data in the target volumes will be overwritten
-
-set "VOL_DB=%PROJECT_NAME%_dbdata"
 
 if not exist "%BACKUP_DIR%" (
   echo [ERROR] Backup directory not found: "%BACKUP_DIR%"
@@ -282,18 +303,26 @@ if errorlevel 1 (
 )
 echo [INFO] Timestamp format is ok
 
-set "PG_FILE=dbdata-%TS_INPUT%.tar.gz"
-set "DO_PG="
-if exist "%BACKUP_DIR%\%PG_FILE%" set "DO_PG=1"
-if not defined DO_PG (
-  echo [ERROR] No matching backups found for timestamp "%TS_INPUT%"
+set "MISSING_LIST="
+set "RESTORE_LIST="
+for %%S in (%VOLUME_SUFFIXES%) do (
+  set "ARCHIVE_%%S=%%S-%TS_INPUT%.tar.gz"
+  if exist "%BACKUP_DIR%\!ARCHIVE_%%S!" (
+    set "RESTORE_LIST=!RESTORE_LIST! %%S"
+  ) else (
+    set "MISSING_LIST=!MISSING_LIST! %%S"
+  )
+  set "VOL_NAME_%%S=%PROJECT_NAME%_%%S"
+)
+
+if defined MISSING_LIST (
+  echo [ERROR] Missing backup archives for:%MISSING_LIST%
   call :pause & goto :menu
 )
 
-
 echo(
 echo Selected timestamp %TS_INPUT%
-if defined DO_PG echo   Will restore %PG_FILE%
+echo   Will restore volumes:%RESTORE_LIST%
 call :confirm "Proceed with restore? (Y/N) "
 if errorlevel 2 (echo [INFO] Cancelled & call :pause & goto :menu)
 
@@ -302,28 +331,43 @@ call :compose_cmd down
 
 call :ensure_image alpine || (echo [ERROR] Docker base image not available & call :pause & goto :menu)
 
-	echo [INFO] Verifying backup files are readable inside Docker
-	if defined DO_PG (
-	  docker run --rm -v "%BACKUP_DIR%:/backup:ro" alpine sh -lc "test -f /backup/%PG_FILE% && echo found %PG_FILE%" || (
-	    echo [ERROR] Cannot access %PG_FILE% inside Docker Ensure Docker Desktop file sharing allows the drive for "%BACKUP_DIR%"
-	    call :pause & goto :menu
-	  )
-	)
-echo [INFO] Recreating empty volumes where applicable
-if defined DO_PG (
-  docker volume rm -f "%VOL_DB%" >nul 2>&1
-  docker volume create "%VOL_DB%" >nul 2>&1
-  if errorlevel 1 (echo [ERROR] Could not create volume %VOL_DB% & call :pause & goto :menu)
-
-
-if defined DO_PG (
-  echo [INFO] Restoring DB from "%PG_FILE%"
-  docker run --rm -v "%VOL_DB%:/volume" -v "%BACKUP_DIR%:/backup" alpine sh -lc "set -ex; rm -rf /volume/* /volume/.[!.]* /volume/..?* 2>/dev/null || true; tar xzf /backup/%PG_FILE% -C /volume"
-  if errorlevel 1 (echo [ERROR] DB restore failed & call :pause & goto :menu)
-  echo [OK] DB volume restored from %PG_FILE%
+echo [INFO] Verifying backup files are readable inside Docker
+for %%S in (%VOLUME_SUFFIXES%) do (
+  set "ARCHIVE=!ARCHIVE_%%S!"
+  docker run --rm -v "%BACKUP_DIR%:/backup:ro" alpine sh -lc "test -f /backup/!ARCHIVE! && echo found !ARCHIVE!" || (
+    echo [ERROR] Cannot access !ARCHIVE! inside Docker Ensure Docker Desktop file sharing allows the drive for "%BACKUP_DIR%"
+    call :pause & goto :menu
+  )
 )
-echo [OK] Restore completed for available archives
+
+echo [INFO] Recreating empty volumes where applicable
+for %%S in (%VOLUME_SUFFIXES%) do (
+  set "VOL=!VOL_NAME_%%S!"
+  docker volume rm -f "!VOL!" >nul 2>&1
+  docker volume create "!VOL!" >nul 2>&1
+  if errorlevel 1 (
+    echo [ERROR] Could not create volume !VOL!
+    call :pause & goto :menu
+  )
+)
+
+for %%S in (%VOLUME_SUFFIXES%) do (
+  set "VOL=!VOL_NAME_%%S!"
+  set "ARCHIVE=!ARCHIVE_%%S!"
+  call :restore_volume "%%S" "!VOL!" "!ARCHIVE!" "%BACKUP_DIR%"
+  if errorlevel 1 (
+    goto :restore_fail
+  )
+)
+
+:restore_success
+echo [OK] Restore completed for:%RESTORE_LIST%
 echo [INFO] Use option 1 to start services when ready
+call :pause
+goto :menu
+
+:restore_fail
+echo [ERROR] Restore aborted due to errors above
 call :pause
 goto :menu
 
@@ -467,4 +511,45 @@ if errorlevel 1 (
     endlocal & exit /b 1
   )
 )
+endlocal & exit /b 0
+
+:backup_volume
+setlocal
+set "SUFFIX=%~1"
+set "VOLUME=%~2"
+set "TS=%~3"
+set "BACKUP_DIR=%~4"
+set "ARCHIVE=%SUFFIX%-%TS%.tar.gz"
+
+docker volume inspect "%VOLUME%" >nul 2>&1
+if errorlevel 1 (
+  echo [WARN] Volume "%VOLUME%" not found Skipping %SUFFIX% backup
+  endlocal & exit /b 1
+)
+
+echo [INFO] Backing up %SUFFIX% volume "%VOLUME%" to %ARCHIVE%
+docker run --rm -v "%VOLUME%:/volume" -v "%BACKUP_DIR%:/backup" alpine sh -c "tar czf /backup/%ARCHIVE% -C /volume ."
+if errorlevel 1 (
+  echo [ERROR] %SUFFIX% backup failed
+  endlocal & exit /b 2
+)
+
+echo [OK] %SUFFIX% volume archived as %ARCHIVE%
+endlocal & exit /b 0
+
+:restore_volume
+setlocal
+set "SUFFIX=%~1"
+set "VOLUME=%~2"
+set "ARCHIVE=%~3"
+set "BACKUP_DIR=%~4"
+
+echo [INFO] Restoring %SUFFIX% from "%ARCHIVE%"
+docker run --rm -v "%VOLUME%:/volume" -v "%BACKUP_DIR%:/backup" alpine sh -lc "set -ex; rm -rf /volume/* /volume/.[!.]* /volume/..?* 2>/dev/null || true; tar xzf /backup/%ARCHIVE% -C /volume"
+if errorlevel 1 (
+  echo [ERROR] %SUFFIX% restore failed from %ARCHIVE%
+  endlocal & exit /b 1
+)
+
+echo [OK] %SUFFIX% volume restored from %ARCHIVE%
 endlocal & exit /b 0
