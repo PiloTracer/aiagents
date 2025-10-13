@@ -201,7 +201,6 @@ class ChatConversationService:
             self.provider.generate,
             prompt_messages,
             temperature=settings.OPENAI_TEMPERATURE,
-            max_tokens=settings.OPENAI_MAX_TOKENS,
         )
 
     def _build_prompt_messages(

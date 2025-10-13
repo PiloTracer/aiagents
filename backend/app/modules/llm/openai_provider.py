@@ -36,13 +36,20 @@ class OpenAIChatProvider(ChatCompletionProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": list(messages),
+        }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        else:
+            payload["temperature"] = settings.OPENAI_TEMPERATURE
+
+        if max_tokens is not None and max_tokens > 0:
+            payload["max_tokens"] = max_tokens
+
         try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=list(messages),
-                temperature=temperature if temperature is not None else settings.OPENAI_TEMPERATURE,
-                max_tokens=max_tokens if max_tokens is not None else settings.OPENAI_MAX_TOKENS,
-            )
+            response = self._client.chat.completions.create(**payload)
         except Exception as exc:  # noqa: BLE001
             logger.exception("OpenAI chat completion failed: %s", exc)
             raise
@@ -57,4 +64,3 @@ class OpenAIChatProvider(ChatCompletionProvider):
         except Exception as exc:  # noqa: BLE001
             logger.warning("OpenAI provider health check failed: %s", exc)
             return False
-

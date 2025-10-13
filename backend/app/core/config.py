@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     OPENAI_ORG: str | None = None
     OPENAI_PROJECT: str | None = None
     OPENAI_TEMPERATURE: float = 0.3
-    OPENAI_MAX_TOKENS: int = 1200
+    OPENAI_MAX_TOKENS: int | None = None
 
     # Chat / conversation settings
     CHAT_DEFAULT_TOP_K: int = 5
