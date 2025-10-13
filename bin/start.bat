@@ -21,6 +21,12 @@ set "BACKUP_DIR=%CD%\backups"
 set "STACK_LABEL=com.docker.compose.project=%PROJECT_NAME%"
 set "VOLUME_SUFFIXES=dbdata dbragdata dbragsnapshots"
 
+REM Compose references ${oauthtoken} for optional NVIDIA auth. Define a harmless default
+REM so compose does not emit warnings when the token is intentionally unset.
+if not defined oauthtoken (
+  set "oauthtoken=unused"
+)
+
 call :detect_compose || goto :fatal
 call :check_docker || goto :fatal
 
