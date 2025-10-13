@@ -264,7 +264,7 @@ export default function MenuClient() {
           </article>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-2">
+        <section className="grid gap-6 lg:grid-cols-3">
           <article className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3 text-sm text-slate-300">
             <h2 className="text-lg font-semibold text-blue-200">Qdrant Dashboard</h2>
             <p>Open the built-in UI to confirm collection growth and payload distribution.</p>
@@ -287,6 +287,17 @@ export default function MenuClient() {
             >
               Trigger agent sync
             </button>
+          </article>
+
+          <article className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3 text-sm text-slate-300">
+            <h2 className="text-lg font-semibold text-blue-200">Catalog Manager</h2>
+            <p>Configure knowledge areas, agents, and access roles before enabling the chatbot.</p>
+            <Link
+              href="/catalog"
+              className="inline-block rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+            >
+              Open catalog
+            </Link>
           </article>
         </section>
 

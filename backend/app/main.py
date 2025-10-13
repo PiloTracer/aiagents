@@ -8,6 +8,7 @@ from app.core.module_loader import collect_routers
 from app.core.database import SessionLocal, ensure_core_schema
 from app.core.qdrant_client import ensure_qdrant_ready
 from app.modules.users.bootstrap import ensure_default_admin
+from app.modules.catalog.bootstrap import ensure_default_catalog
 
 
 def create_app() -> FastAPI:
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
         db = SessionLocal()
         try:
             ensure_default_admin(db)
+            ensure_default_catalog(db)
         finally:
             db.close()
 
