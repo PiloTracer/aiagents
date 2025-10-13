@@ -37,6 +37,24 @@ class TextEmbeddingsInferenceEmbeddings(Embeddings):
         self.model = model
         self.session = requests.Session()
 
+    @staticmethod
+    def _coerce_vectors(raw: object) -> List[List[float]]:
+        if not isinstance(raw, list):
+            return []
+        if not raw:
+            return []
+        first_item = raw[0]
+        if isinstance(first_item, dict):
+            if "embedding" in first_item:
+                return [item.get("embedding", []) for item in raw]
+            if "vector" in first_item:
+                return [item.get("vector", []) for item in raw]
+        elif isinstance(first_item, (list, tuple)):
+            return [list(item) for item in raw]
+        elif isinstance(first_item, (int, float)):
+            return [list(raw)]
+        return []
+
     def _embed(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
@@ -52,6 +70,10 @@ class TextEmbeddingsInferenceEmbeddings(Embeddings):
                 vectors = [item.get("vector", []) for item in data.get("items", [])]
             elif "embeddings" in data:
                 vectors = data.get("embeddings", [])
+            elif "value" in data and isinstance(data["value"], list):
+                vectors = self._coerce_vectors(data["value"])
+        elif isinstance(data, list):
+            vectors = self._coerce_vectors(data)
         if not vectors:
             raise ValueError(f"Unexpected response from embedding endpoint: {data}")
         return vectors
