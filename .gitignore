@@ -107,6 +107,7 @@ dbdata/
 vibe/
 \.errors
 DOCS/
+DOCS.*/
 notrack.*
 model_manifest.*
 nim_manifest*.*
