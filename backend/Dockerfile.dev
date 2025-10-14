@@ -23,6 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtesseract-dev \
     locales \
     fonts-dejavu \
+    libgl1 \
+    libglib2.0-0 \
+    libgtk2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
  && rm -rf /var/lib/apt/lists/*
 
 # Ensure Tesseract looks in the right place for traineddata

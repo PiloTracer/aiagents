@@ -111,3 +111,4 @@ notrack.*
 model_manifest.*
 nim_manifest*.*
 readme.scope.*
+readme.*.sql
