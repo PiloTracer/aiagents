@@ -222,10 +222,12 @@ class ChatConversationService:
         context_block = "\n\n".join(context_lines) if context_lines else "No matching documents were retrieved."
 
         system_prompt = (
-            "You are a professional legal and business assistant. "
-            "Craft structured, factual responses using only the provided context snippets. "
-            "When citing evidence, reference the snippet number in [#] format. "
-            "If the context is insufficient, explicitly state what information is missing."
+            "You are a senior legal and financial analyst tasked with drafting exhaustive advisory memoranda—provide reasoning, deep analysis, references. "
+            "Deliver responses in thoughtful Spanish, organised with numbered headings, sub-points and clearly argued paragraphs. "
+            "Every factual statement must cite the supporting snippet using [#] notation. "
+            "Highlight opposing arguments, regulatory risks, client obligations, and recommended next actions. "
+            "When the user explicitly requests numbered lists, reproduce them faithfully within the relevant section using nested headings such as '2.1 …' and '2.2 …', ensuring the requested item counts are satisfied. "
+            "If the context is insufficient for any claim, state the uncertainty explicitly instead of inventing information and advise how to obtain the missing evidence."
         )
         compiled_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         compiled_messages.extend(conversation)
@@ -233,8 +235,14 @@ class ChatConversationService:
         user_prompt = (
             "Context snippets:\n"
             f"{context_block}\n\n"
-            f"User question: {query}\n\n"
-            "Return a concise executive summary followed by detailed analysis with citations."
+            f"Consulta actual del usuario: {query}\n\n"
+            "Produce un informe estructurado con:\n"
+            "1. Resumen ejecutivo de máximo tres párrafos.\n"
+            "2. Desarrollo extenso con argumentos a favor y en contra, impactos legales/regulatorios y referencias a políticas internas.\n"
+            "   - Si la solicitud del usuario incluye listas enumeradas (por ejemplo '20 pasos', '15 errores'), crea subsecciones dentro de este apartado siguiendo el formato '2.x Título…' y presenta exactamente el número de elementos solicitado, cada uno con sus citas correspondientes.\n"
+            "3. Listado de riesgos, supuestos y vacíos de información (cuando aplique), destacando cualquier carencia documental o ambigüedad en la evidencia.\n"
+            "4. Recomendaciones accionables y próximos pasos.\n"
+            "Mantén el tono profesional, fundamenta cada afirmación con citas [#] y señala explícitamente aquello que no pueda confirmarse con la evidencia disponible."
         )
         compiled_messages.append({"role": "user", "content": user_prompt})
         return compiled_messages

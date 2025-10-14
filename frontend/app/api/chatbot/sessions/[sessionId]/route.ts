@@ -11,14 +11,16 @@ function backendBase(): string {
 
 export async function GET(
   _request: Request,
-  { params }: { params: { sessionId: string } },
+  context: { params: Promise<{ sessionId: string }> },
 ) {
   const token = (await cookies()).get("access_token")?.value;
   if (!token) {
     return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
   }
 
-  const response = await fetch(`${backendBase()}/chatbot/sessions/${params.sessionId}`, {
+  const { sessionId } = await context.params;
+
+  const response = await fetch(`${backendBase()}/chatbot/sessions/${sessionId}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -46,14 +48,16 @@ export async function GET(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { sessionId: string } },
+  context: { params: Promise<{ sessionId: string }> },
 ) {
   const token = (await cookies()).get("access_token")?.value;
   if (!token) {
     return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
   }
 
-  const response = await fetch(`${backendBase()}/chatbot/sessions/${params.sessionId}`, {
+  const { sessionId } = await context.params;
+
+  const response = await fetch(`${backendBase()}/chatbot/sessions/${sessionId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -77,4 +81,3 @@ export async function DELETE(
 
   return NextResponse.json(data, { status: response.status });
 }
-

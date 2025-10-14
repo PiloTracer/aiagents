@@ -3,6 +3,12 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass, field
 
+try:
+    from ftfy import fix_text
+except Exception:  # pragma: no cover - optional dependency
+    def fix_text(value: str) -> str:
+        return value
+
 
 _PRESERVED_WHITESPACE = {"\n", "\r", "\t"}
 _WHITESPACE_CATEGORIES = {"Zs"}
@@ -36,7 +42,8 @@ def sanitize_text(value: str) -> SanitizedText:
     if not value:
         return SanitizedText(text="")
 
-    normalized = unicodedata.normalize("NFKC", value)
+    repaired = fix_text(value)
+    normalized = unicodedata.normalize("NFKC", repaired)
     kept_chars: list[str] = []
     removed_samples: list[str] = []
     removed = 0
